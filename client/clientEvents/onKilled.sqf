@@ -6,32 +6,62 @@
 //	@file Author: [404] Deadbeat, MercyfulFate, AgentRev
 //	@file Created: 20/11/2012 05:19
 
-_player = _this select 0;
-_presumedKiller = effectiveCommander (_this select 1);
-_killer = _player getVariable ["FAR_killerPrimeSuspect", objNull];
+params ["_player", "_presumedKiller", "_instigator"];
 
-if (isNull _killer) then { _killer = _presumedKiller };
-if (_killer == _player) then { _killer = objNull };
+_presumedKiller = effectiveCommander _presumedKiller;
+_killer = _player getVariable "FAR_killerUnit";
 
-[_player, _killer, _presumedKiller] spawn
+if (isNil "_killer" && !isNil "FAR_findKiller") then
 {
-	if (isServer) then
-	{
-		_this call server_PlayerDied;
-	}
-	else
-	{
-		PlayerCDeath = _this;
-		publicVariableServer "PlayerCDeath";
-	};
+	_killer = _player call FAR_findKiller;
 };
+
+if (isNil "_killer" || {isNull _killer}) then
+{
+	_killer = [_instigator, _presumedKiller] select isNull _instigator;
+};
+
+_killer = effectiveCommander _killer;
+_deathCause = _player getVariable ["A3W_deathCause_local", []];
+
+if (_player getVariable ["FAR_isUnconscious", 0] == 1 && _deathCause isEqualTo []) then
+{
+	_deathCause = [["kill","bleedout"] select (_player getVariable ["FAR_injuryBroadcast", false])];
+	_player setVariable ["A3W_deathCause_local", _deathCause];
+};
+
+private _killerTemp = _killer;
+
+if (_killer == _player) then
+{
+	if (_deathCause isEqualTo []) then
+	{
+		_deathCause = switch (true) do
+		{
+			case (_player == player && ([missionNamespace getVariable "thirstLevel"] param [0,1,[0]] <= 0 || [missionNamespace getVariable "hungerLevel"] param [0,1,[0]] <= 0)): { "survival" };
+			case (getOxygenRemaining _player <= 0 && getPosASLW _player select 2 < -0.1): { "drown" };
+			default { "suicide" };
+		};
+
+		_deathCause = [_deathCause, serverTime];
+		_player setVariable ["A3W_deathCause_local", _deathCause];
+	};
+
+	_killerTemp = objNull;
+};
+
+[_player, _killerTemp, _presumedKiller, _deathCause] remoteExecCall ["A3W_fnc_serverPlayerDied", 2];
+[_player, true] call A3W_fnc_killBroadcast;
 
 if (_player == player) then
 {
-	closeDialog 2001; // Close Gunstore
-	closeDialog 2009; // Close Genstore
-	closeDialog 5285; // Close Vehstore
+	(findDisplay 2001) closeDisplay 0; // Close Gunstore
+	(findDisplay 2009) closeDisplay 0; // Close Genstore
+	(findDisplay 5285) closeDisplay 0; // Close Vehstore
+	(findDisplay 5785) closeDisplay 0; // Close Paintshop
+	(findDisplay 63211) closeDisplay 0; // Close ATM
 	uiNamespace setVariable ["BIS_fnc_guiMessage_status", false]; // close message boxes
+	closeDialog 0;
 
 	// Load scoreboard in render scope
 	["A3W_scoreboard", "onEachFrame",
@@ -40,89 +70,59 @@ if (_player == player) then
 		["A3W_scoreboard", "onEachFrame"] call BIS_fnc_removeStackedEventHandler;
 	}] call BIS_fnc_addStackedEventHandler;
 
-	playerData_gear = ""; // Reset gear data
-	//combatTimestamp = -1; // Reset abort timer
+	if (!isNil "savePlayerHandle" && {typeName savePlayerHandle == "SCRIPT" && {!scriptDone savePlayerHandle}}) then
+	{
+		terminate savePlayerHandle;
+	};
+
+	playerData_infoPairs = nil;
+	playerData_savePairs = nil;
+	combatTimestamp = -1; // Reset abort timer
 };
 
-_player setVariable ["FAR_killerPrimeSuspect", nil];
-_player setVariable ["FAR_killerVehicle", nil];
-_player setVariable ["FAR_killerAmmo", nil];
-_player setVariable ["FAR_killerSuspects", nil];
+diag_log format ["KILLED by %1", if (isPlayer _killer) then { "player " + str [name _killer, getPlayerUID _killer] } else { _killer }];
+
+// reset var in case Killed event triggers twice (happens on rare occasions)
+_player setVariable ["FAR_killerUnit", nil];
 
 _player spawn
 {
 	_player = _this;
 
 	_money = _player getVariable ["cmoney", 0];
-	_player setVariable ["cmoney", 0, true];
+	//_player setVariable ["cmoney", 0, true];
+	[player, 0, true] call A3W_fnc_setCMoney;
 
-	_items = [];
+	_items = if (_player == player) then { true call mf_inventory_list } else { [] };
+
+	pvar_dropPlayerItems = [_player, _money, _items];
+	publicVariableServer "pvar_dropPlayerItems";
+
+	if (_player == player) then
 	{
-		_id = _x select 0;
-		_qty = _x select 1;
-		_type = (_id call mf_inventory_get) select 4;
-
-		_items pushBack [_id, _qty, _type];
-		[_id, _qty] call mf_inventory_remove;
-	} forEach call mf_inventory_all;
-
-	// wait until corpse stops moving before dropping stuff
-	waitUntil {(getPos _player) select 2 < 1 && vectorMagnitude velocity _player < 1};
-
-	// Drop money
-	if (_money > 0) then
-	{
-		_m = createVehicle ["Land_Money_F", getPosATL _player, [], 0.5, "CAN_COLLIDE"];
-		_m setDir random 360;
-		_m setVariable ["cmoney", _money, true];
-		_m setVariable ["owner", "world", true];
+		{ _x call mf_inventory_remove } forEach _items;
 	};
-
-	// Drop items
-	_itemsDroppedOnDeath = [];
-
-	{
-		_id = _x select 0;
-		_qty = _x select 1;
-		_type = _x select 2;
-
-		for "_i" from 1 to _qty do
-		{
-			_obj = createVehicle [_type, getPosATL _player, [], 0.5, "CAN_COLLIDE"];
-			_obj setDir random 360;
-			_obj setVariable ["mf_item_id", _id, true];
-			_itemsDroppedOnDeath pushBack netId _obj;
-		};
-	} forEach _items;
-
-	itemsDroppedOnDeath = _itemsDroppedOnDeath;
-	publicVariableServer "itemsDroppedOnDeath";
 };
 
 _player spawn fn_removeAllManagedActions;
 removeAllActions _player;
 
-// Same-side kills
-if (_player == player && (playerSide == side group _killer) && (player != _killer) && (vehicle player != vehicle _killer)) then
+// Handle teamkills
+if (_player == player && playerSide in [BLUFOR,OPFOR] && player != _killer && vehicle player != vehicle _killer) then
 {
-	// Handle teamkills
-	if (playerSide in [BLUFOR,OPFOR]) then
+	private _killerName = [_player getVariable "FAR_killerName"] param [0,"",[""]];
+	private _killerUID = [_player getVariable "FAR_killerUID"] param [0,"",[""]];
+	private _killerSide = [_player getVariable "FAR_killerSide"] param [0,sideUnknown,[sideUnknown]];
+
+	if (playerSide == _killerSide) then
 	{
-		if (_killer isKindOf "CAManBase") then
+		if (_killerUID in ["", "0", getPlayerUID player]) then
 		{
-			pvar_PlayerTeamKiller = _killer;
+			pvar_PlayerTeamKiller = []; // not a valid player
 		}
 		else
 		{
-			pvar_PlayerTeamKiller = objNull;
-		};
-	}
-	else // Compensate negative score for indie-indie kills
-	{
-		if (isPlayer _killer) then
-		{
-			pvar_removeNegativeScore = _killer;
-			publicVariableServer "pvar_removeNegativeScore";
+			pvar_PlayerTeamKiller = [_killer, _killerUID, _killerName];
 		};
 	};
 };

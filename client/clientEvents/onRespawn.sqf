@@ -7,18 +7,19 @@
 //	@file Created: 20/11/2012 05:19
 //	@file Args:
 
-private ["_player", "_corpse"];
+params ["_player", "_corpse"];
 
 playerSetupComplete = false;
+playerSpawning = true;
 
 9999 cutText ["", "BLACK", 0.01];
 9123 cutRsc ["RscEmpty", "PLAIN"];
 
-_player = _this select 0;
-_corpse = _this select 1;
-
 _corpse setVariable ["newRespawnedUnit", _player, true];
 _player setVariable ["playerSpawning", true, true];
+_player setVariable ["A3W_oldCorpse", _corpse];
+
+_this remoteExec ["A3W_fnc_playerRespawnServer", 2];
 
 _group = _player getVariable ["currentGroupRestore", grpNull];
 
@@ -52,7 +53,19 @@ _respawnPos = markerPos (_respawnMarkers call BIS_fnc_selectRandom);
 
 if !(_respawnPos isEqualTo [0,0,0]) then
 {
-	_player setPos _respawnPos;
+	private "_waterPos";
+	if (surfaceIsWater _respawnPos) then
+	{
+		_top = +_respawnPos;
+		_top set [2, (_top select 2) + 1000];
+		_buildings = (lineIntersectsSurfaces [_top, _respawnPos, objNull, objNull, true, -1, "GEOM", "NONE"]) select {(_x select 2) isKindOf "Land_Pier_Box_F"};
+
+		if !(_buildings isEqualTo []) then
+		{
+			_waterPos = _buildings select 0 select 0;
+		};
+	};
+	if (isNil "_waterPos") then { _player setPos _respawnPos } else { _player setPosASL _waterPos };
 };
 
 _player call playerSetup;
@@ -61,10 +74,10 @@ _player call playerSetup;
 
 call playerSpawn;
 
-if (isPlayer pvar_PlayerTeamKiller) then
+if !(pvar_PlayerTeamKiller isEqualTo []) then
 {
 	pDialogTeamkiller = pvar_PlayerTeamKiller;
-	pvar_PlayerTeamKiller = objNull;
+	pvar_PlayerTeamKiller = [];
 
 	[] execVM "client\functions\createTeamKillDialog.sqf";
 };

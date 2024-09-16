@@ -16,9 +16,16 @@ _config = configFile >> "CfgMovesMaleSdr" >> "States" >> _currentAnim;
 _onLadder =	(getNumber (_config >> "onLadder"));
 if(_onLadder == 1) exitWith{player globalChat "You can't move this object while on a ladder";};
 
-if (R3F_LOG_mutex_local_verrou) then
+if (R3F_LOG_mutex_local_verrou) exitWith
 {
 	player globalChat STR_R3F_LOG_mutex_action_en_cours;
+};
+
+private _objet = _this select 0;
+
+if (unitIsUAV _objet && {!(_objet getVariable ["ownerUID","0"] isEqualTo getPlayerUID player) && !(group (uavControl _objet select 0) in [grpNull, group player])}) then
+{
+	player globalChat STR_R3F_LOG_action_deplacer_objet_UAV_group;
 }
 else
 {
@@ -26,9 +33,8 @@ else
 
 	R3F_LOG_objet_selectionne = objNull;
 
-	private ["_objet", "_isSwimming", "_est_calculateur", "_arme_principale", "_arme_principale_accessoires", "_arme_principale_magasines", "_action_menu_release_relative", "_action_menu_release_horizontal" , "_action_menu_45", "_action_menu_90", "_action_menu_180", "_azimut_canon", "_muzzles", "_magazine", "_ammo", "_adjustPOS"];
+	private ["_isSwimming", "_est_calculateur", "_arme_principale", "_arme_principale_accessoires", "_arme_principale_magasines", "_action_menu_release_relative", "_action_menu_release_horizontal" , "_action_menu_45", "_action_menu_90", "_action_menu_180", "_azimut_canon", "_muzzles", "_magazine", "_ammo", "_adjustPOS"];
 
-	_objet = _this select 0;
 	if(isNil {_objet getVariable "R3F_Side"}) then {
 		_objet setVariable ["R3F_Side", (playerSide), true];
 	};
@@ -100,7 +106,7 @@ else
 				0.1 - (_objectMinBB select 2)
 			]];
 
-			if (count (weapons _objet) > 0) then
+			/*if (count (weapons _objet) > 0) then
 			{
 				// Le canon doit pointer devant nous (sinon on a l'impression de se faire empaler)
 				_azimut_canon = ((_objet weaponDirection (weapons _objet select 0)) select 0) atan2 ((_objet weaponDirection (weapons _objet select 0)) select 1);
@@ -115,24 +121,25 @@ else
 				{
 					publicVariable "R3F_ARTY_AND_LOG_PUBVAR_setDir";
 				};
-			};
+			};*/
 
 			R3F_LOG_mutex_local_verrou = false;
 			R3F_LOG_force_horizontally = false;
 
-			_action_menu_release_relative = player addAction [("<img image='client\icons\r3f_release.paa' color='#06ef00'/> <t color='#06ef00'>" + STR_R3F_LOG_action_relacher_objet + "</t>"), "addons\R3F_ARTY_AND_LOG\R3F_LOG\objet_deplacable\relacher.sqf", false, 5, true, true];
-			_action_menu_release_horizontal = player addAction [("<img image='client\icons\r3f_releaseh.paa' color='#06ef00'/> <t color='#06ef00'>" + STR_RELEASE_HORIZONTAL + "</t>"), "addons\R3F_ARTY_AND_LOG\R3F_LOG\objet_deplacable\relacher.sqf", true, 5, true, true];
-			_action_menu_45 = player addAction [("<img image='client\icons\r3f_rotate.paa' color='#06ef00'/> <t color='#06ef00'>Rotate object 45°</t>"), "addons\R3F_ARTY_AND_LOG\R3F_LOG\objet_deplacable\rotate.sqf", 45, 5, true, false];
+			_action_menu_release_relative = player addAction [("<img image='client\icons\r3f_release.paa' color='#06ef00'/> <t color='#06ef00'>" + STR_R3F_LOG_action_relacher_objet + "</t>"), "addons\R3F_ARTY_AND_LOG\R3F_LOG\objet_deplacable\relacher.sqf", false, 5.5, true, true];
+			_action_menu_release_horizontal = player addAction [("<img image='client\icons\r3f_releaseh.paa' color='#06ef00'/> <t color='#06ef00'>" + STR_RELEASE_HORIZONTAL + "</t>"), "addons\R3F_ARTY_AND_LOG\R3F_LOG\objet_deplacable\relacher.sqf", true, 5.5, true, true];
+			_action_menu_45 = player addAction [("<img image='client\icons\r3f_rotate.paa' color='#06ef00'/> <t color='#06ef00'>Rotate object 45°</t>"), "addons\R3F_ARTY_AND_LOG\R3F_LOG\objet_deplacable\rotate.sqf", 45, 5.5, true, false];
 			//_action_menu_90 = player addAction [("<img image='client\ui\ui_arrow_combo_ca.paa'/> <t color='#dddd00'>Rotate object 90°</t>"), "addons\R3F_ARTY_AND_LOG\R3F_LOG\objet_deplacable\rotate.sqf", 90, 5, true, false];
 			//_action_menu_180 = player addAction [("<img image='client\ui\ui_arrow_combo_ca.paa'/> <t color='#dddd00'>Rotate object 180°</t>"), "addons\R3F_ARTY_AND_LOG\R3F_LOG\objet_deplacable\rotate.sqf", 180, 5, true, false];
 
 			// On limite la vitesse de marche et on interdit de monter dans un véhicule tant que l'objet est porté
-			while {!isNull R3F_LOG_joueur_deplace_objet && alive player} do
+			while {attachedTo R3F_LOG_joueur_deplace_objet == player && alive player} do
 			{
 				if (vehicle player != player) then
 				{
 					player globalChat STR_R3F_LOG_ne_pas_monter_dans_vehicule;
 					player action ["eject", vehicle player];
+					moveOut player;
 					sleep 1;
 				}
 				else
@@ -153,58 +160,66 @@ else
 				sleep 0.25;
 			};
 
+			R3F_LOG_joueur_deplace_objet = objNull;
+
 			// L'objet n'est plus porté, on le repose
-			detach _objet;
-
-			// this addition comes from Sa-Matra (fixes the heigt of some of the objects) - all credits for this fix go to him!
-
-			_class = typeOf _objet;
-
-			_zOffset = switch (true) do
+			if (attachedTo _objet == player) then
 			{
-				//case (_class == "Land_Scaffolding_F"):         { 3 };
-				case (_class == "Land_Canal_WallSmall_10m_F"): { 2 };
-				case (_class == "Land_Canal_Wall_Stairs_F"):   { 2 };
-				default { 0 };
-			};
+				detach _objet;
 
-			if (R3F_LOG_force_horizontally) then
-			{
-				R3F_LOG_force_horizontally = false;
+				// this addition comes from Sa-Matra (fixes the heigt of some of the objects) - all credits for this fix go to him!
 
-				_objectATL = getPosATL _objet;
+				_class = typeOf _objet;
 
-				if ((_objectATL select 2) - _zOffset < 0) then
+				_zOffset = switch (true) do
 				{
-					_objectATL set [2, 0 + _zOffset];
-					_objet setPosATL _objectATL;
+					//case (_class == "Land_Scaffolding_F"):         { 3 };
+					case (_class == "Land_Canal_WallSmall_10m_F"): { 2 };
+					case (_class == "Land_Canal_Wall_Stairs_F"):   { 2 };
+					case (_class == "Land_PierLadder_F"):          { 2 };
+					default { 0 };
+				};
+
+				if (R3F_LOG_force_horizontally) then
+				{
+					R3F_LOG_force_horizontally = false;
+
+					_objectATL = getPosATL _objet;
+
+					if ((_objectATL select 2) - _zOffset < 0) then
+					{
+						_objectATL set [2, 0 + _zOffset];
+						_objet setPosATL _objectATL;
+					}
+					else
+					{
+						_objectASL = getPosASL _objet;
+						_objectASL set [2, ((getPosASL player) select 2) + _zOffset];
+						_objet setPosASL _objectASL;
+					};
+
+					_objet setVectorUp [0,0,1];
 				}
 				else
 				{
-					_objectASL = getPosASL _objet;
-					_objectASL set [2, ((getPosASL player) select 2) + _zOffset];
-					_objet setPosASL _objectASL;
+					_objectPos = _objet call fn_getPos3D;
+					_objectPos set [2, ((player call fn_getPos3D) select 2) + _zOffset];
+					_objet setPos _objectPos;
 				};
 
-				_objet setVectorUp [0,0,1];
-			}
-			else
-			{
-				_objectPos = _objet call fn_getPos3D;
-				_objectPos set [2, ((player call fn_getPos3D) select 2) + _zOffset];
-				_objet setPos _objectPos;
+				_objet setVelocity [0,0,0];
 			};
-
-			_objet setVelocity [0,0,0];
 
 			player removeAction _action_menu_release_relative;
 			player removeAction _action_menu_release_horizontal;
 			player removeAction _action_menu_45;
 			//player removeAction _action_menu_90;
 			//player removeAction _action_menu_180;
-			R3F_LOG_joueur_deplace_objet = objNull;
 
-			_objet setVariable ["R3F_LOG_est_deplace_par", objNull, true];
+			if (_objet getVariable ["R3F_LOG_est_deplace_par", objNull] == player) then
+			{
+				_objet setVariable ["R3F_LOG_est_deplace_par", objNull, true];
+			};
 
 			player forceWalk false;
 			player selectWeapon _arme_principale;

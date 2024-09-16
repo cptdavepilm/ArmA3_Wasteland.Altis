@@ -37,11 +37,13 @@ if (isNil "_moneyObj" || {player distance _moneyObj > PICK_DISTANCE}) exitWith
 	mutexScriptInProgress = false;
 };
 
-player playMove ([player, "AmovMstpDnon_AinvMstpDnon", "putdown"] call getFullMove);
+//player playMove ([player, "AmovMstpDnon_AinvMstpDnon", "putdown"] call getFullMove);
+player playActionNow "PutDown";
 sleep 0.25;
 
-pvar_processMoneyPickup = [player, netId _moneyObj];
-publicVariableServer "pvar_processMoneyPickup";
+// pvar_processMoneyPickup = [player, netId _moneyObj];
+// publicVariableServer "pvar_processMoneyPickup";
+["pickupMoney", player, _moneyObj] call A3W_fnc_processTransaction;
 
 sleep 0.75;
 mutexScriptInProgress = false;

@@ -6,7 +6,7 @@
 
 // This script is much more complicated than it should be, because canAddItemToXXX is not detecting free inventory space correctly in Arma 3 v1.34, another bug courtesy of BIS...
 
-private ["_unit", "_item", "_allowedContainers", "_allSlots", "_wpSlotsInfo", "_allowedSlots", "_uniformFree", "_vestFree", "_backpackFree", "_uniform", "_vest", "_backpack", "_containerClass", "_uniformCapacity", "_vestCapacity", "_backpackCapacity", "_itemSize", "_linkedItems", "_linkedItem"];
+private ["_unit", "_item", "_allowedContainers", "_allSlots", "_wpSlotsInfo", "_magCfg", "_allowedSlots", "_uniformFree", "_vestFree", "_backpackFree", "_uniform", "_vest", "_backpack", "_containerClass", "_uniformCapacity", "_vestCapacity", "_backpackCapacity", "_itemSize", "_linkedItems", "_linkedItem"];
 
 _unit = _this select 0;
 _item = _this select 1;
@@ -15,13 +15,25 @@ if (count _this > 2) then { _allowedContainers = _this select 2 };
 
 _allSlots = true;
 _wpSlotsInfo = configFile >> "CfgWeapons" >> _item >> "WeaponSlotsInfo";
+_magCfg = configFile >> "CfgMagazines" >> _item;
 
-if (isClass _wpSlotsInfo) then
+switch (true) do
 {
-	if (isArray (_wpSlotsInfo >> "allowedSlots")) then
+	case (isClass _wpSlotsInfo):
 	{
-		_allowedSlots = getArray (_wpSlotsInfo >> "allowedSlots");
-		_allSlots = false;
+		if (isArray (_wpSlotsInfo >> "allowedSlots")) then
+		{
+			_allowedSlots = getArray (_wpSlotsInfo >> "allowedSlots");
+			_allSlots = false;
+		};
+	};
+	case (isClass _magCfg):
+	{
+		if (isArray (_magCfg >> "allowedSlots")) then
+		{
+			_allowedSlots = getArray (_magCfg >> "allowedSlots");
+			_allSlots = false;
+		};
 	};
 };
 
@@ -37,8 +49,8 @@ if (!isNil "_allowedContainers") then
 		{
 			switch (toLower _x) do
 			{
-				case "uniform":  { _allowedContainers set [_forEachIndex, 701] };
-				case "vest":     { _allowedContainers set [_forEachIndex, 801] };
+				case "uniform":  { _allowedContainers set [_forEachIndex, 801] };
+				case "vest":     { _allowedContainers set [_forEachIndex, 701] };
 				case "backpack": { _allowedContainers set [_forEachIndex, 901] };
 			};
 		};
@@ -75,14 +87,14 @@ _uniform = uniform _unit;
 _vest = vest _unit;
 _backpack = backpack _unit;
 
-if (_uniform != "" && (isNil "_allowedSlots" || {701 in _allowedSlots})) then
+if (_uniform != "" && (isNil "_allowedSlots" || {801 in _allowedSlots})) then
 {
 	_containerClass = getText (configFile >> "CfgWeapons" >> _uniform >> "ItemInfo" >> "containerClass");
 	_uniformCapacity = getNumber (configFile >> "CfgVehicles" >> _containerClass >> "maximumLoad");
 	_uniformFree = _uniformCapacity - ((loadUniform _unit) * _uniformCapacity);
 };
 
-if (_vest != "" && (isNil "_allowedSlots" || {801 in _allowedSlots})) then
+if (_vest != "" && (isNil "_allowedSlots" || {701 in _allowedSlots})) then
 {
 	_containerClass = getText (configFile >> "CfgWeapons" >> _vest >> "ItemInfo" >> "containerClass");
 	_vestCapacity = getNumber (configFile >> "CfgVehicles" >> _containerClass >> "maximumLoad");

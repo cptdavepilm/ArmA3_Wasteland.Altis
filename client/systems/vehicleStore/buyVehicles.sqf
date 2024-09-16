@@ -44,14 +44,27 @@ storePurchaseHandle = _this spawn
 	_itemText = _itemlist lbText _itemIndex;
 	_itemData = _itemlist lbData _itemIndex;
 
+	_itemData = call compile _itemData; // [name, class, price, type, variant, ...]
+
 	_colorlist = _dialog displayCtrl vehshop_color_list;
 	_colorIndex = lbCurSel vehshop_color_list;
 	_colorText = _colorlist lbText _colorIndex;
-	_colorData = _colorlist lbData _colorIndex;
+	_colorData = call compile (_colorlist lbData _colorIndex);
+
+	_partList = _dialog displayCtrl vehshop_part_list;
+	_defPartsChk = _dialog displayCtrl vehshop_defparts_checkbox;
+	_animList = []; // ["anim1", 1, "anim2", 0, ...] - formatted for BIS_fnc_initVehicle
+
+	if (!cbChecked _defPartsChk) then
+	{
+		for "_i" from 0 to (lbSize _partList - 1) do
+		{
+			_animList append [_partList lbData _i, (vehshop_list_checkboxTextures find (_partList lbPicture _i)) max 0];
+		};
+	};
 
 	_showInsufficientFundsError =
 	{
-		_itemText = _this select 0;
 		hint parseText format ["Not enough money for<br/>""%1""", _itemText];
 		playSound "FD_CP_Not_Clear_F";
 		_price = -1;
@@ -59,7 +72,6 @@ storePurchaseHandle = _this spawn
 
 	_showItemSpawnTimeoutError =
 	{
-		_itemText = _this select 0;
 		hint parseText format ["<t color='#ffff00'>An unknown error occurred.</t><br/>The purchase of ""%1"" has been cancelled.", _itemText];
 		playSound "FD_CP_Not_Clear_F";
 		_price = -1;
@@ -67,33 +79,33 @@ storePurchaseHandle = _this spawn
 
 	_showItemSpawnedOutsideMessage =
 	{
-		_itemText = _this select 0;
-		hint format ["""%1"" has been spawned outside, in front of the store.", _itemText];
+		hint format ["""%1"" has been spawned outside, in front of the store.%2", _itemText, ["","\n\nVehicle saving will not start until manually enabled."] select ((objectFromNetId _object) getVariable ["A3W_skipAutoSave", false])];
 		playSound "FD_Finish_F";
 	};
 
 	_applyVehProperties =
 	{
-		private ["_vehicle", "_colorText", "_playerItems", "_playerAssignedItems", "_uavTerminal", "_allUAV"];
-		_vehicle = _this select 0;
-		_colorText = _this select 1;
-		_colorData = _this select 2;
-		_texArray  = [];
+		params ["_vehicle", "_colorText", "_colorData", "_animList"];
 
-		if (_colorData != "") then
+		if (count _colorData > 0) then
 		{
 			[_vehicle, _colorData] call applyVehicleTexture;
 		};
 
-		// If UAV or UGV, fill vehicle with UAV AI, give UAV terminal to our player, and connect it to the vehicle
-		if ({_vehicle isKindOf _x} count (call uavArray) > 0) then
+		if (count _animList > 0) then
 		{
-			switch (playerSide) do
+			[_vehicle, false, _animList, true] remoteExecCall ["BIS_fnc_initVehicle", _vehicle];
+		};
+
+		// If UAV or UGV, fill vehicle with UAV AI, give UAV terminal to our player, and connect it to the vehicle
+		if (unitIsUAV _vehicle) then
+		{
+			private _uavTerminal = configName (configFile >> "CfgWeapons" >> (switch (playerSide) do // retrieve case-sensitive name
 			{
-				case BLUFOR: { _uavTerminal = "B_UavTerminal" };
-				case OPFOR:	 { _uavTerminal = "O_UavTerminal" };
-				default	     { _uavTerminal = "I_UavTerminal" };
-			};
+				case BLUFOR: { "B_UavTerminal" };
+				case OPFOR:  { "O_UavTerminal" };
+				default      { "I_UavTerminal" };
+			}));
 
 			if !(_uavTerminal in assignedItems player) then
 			{
@@ -109,60 +121,57 @@ storePurchaseHandle = _this spawn
 				};
 			};
 
-			player connectTerminalToUav _vehicle;
+			_vehicle spawn
+			{
+				params ["_uav"];
+				private "_crewActive";
+				_time = time;
+
+				waitUntil {time - _time > 30 || {_crewActive = alive _uav && !(crew _uav isEqualTo []); _crewActive}};
+
+				if (_crewActive) then
+				{
+					player connectTerminalToUav _uav;
+				};
+			};
 		};
 
 		_vehicle
 	};
+
+	if (_itemData isEqualType []) then
 	{
-		if (_itemText == _x select 0 && _itemData == _x select 1) exitWith
+		_class = _itemData param [1];
+		_price = _itemData param [2];
+
+		// Ensure the player has enough money
+		if (_price > _playerMoney) exitWith
 		{
-			_class = _x select 1;
-			_price = _x select 2;
-
-			// Ensure the player has enough money
-			if (_price > _playerMoney) exitWith
-			{
-				[_itemText] call _showInsufficientFundsError;
-			};
-
-			_requestKey = call A3W_fnc_generateKey;
-			call requestStoreObject;
-
-			_vehicle = objectFromNetId (missionNamespace getVariable _requestKey);
-
-			if (!isNil "_vehicle" && {!isNull _vehicle}) then
-			{
-				[_vehicle, _colorText, _colorData] call _applyVehProperties;
-			};
-		};
-	} forEach (call allVehStoreVehicles);
-
-	if (!isNil "_price" && {_price > -1}) then
-	{
-		_playerMoney = player getVariable ["cmoney", 0];
-
-		// Re-check for money after purchase
-		if (_price > _playerMoney) then
-		{
-			if (!isNil "_requestKey" && {!isNil _requestKey}) then
-			{
-				deleteVehicle objectFromNetId (missionNamespace getVariable _requestKey);
-			};
-
 			[_itemText] call _showInsufficientFundsError;
-		}
-		else
+		};
+
+		_requestKey = call A3W_fnc_generateKey;
+		_itemData call requestStoreObject;
+
+		_vehicle = objectFromNetId (missionNamespace getVariable _requestKey);
+
+		if (!isNil "_vehicle" && {!isNull _vehicle}) then
 		{
-			vehicleStore_lastPurchaseTime = diag_tickTime;
+			[_vehicle, _colorText, if (!isNil "_colorData") then { _colorData } else { "" }, _animList] call _applyVehProperties;
+		};
+	};
 
-			player setVariable ["cmoney", _playerMoney - _price, true];
-			_playerMoneyText ctrlSetText format ["Cash: $%1", [player getVariable ["cmoney", 0]] call fn_numbersText];
+	if (!isNil "_price" && {_price > -1}) then // vehicle price now handled in spawnStoreObject.sqf
+	{
+		vehicleStore_lastPurchaseTime = diag_tickTime;
 
-			if (["A3W_playerSaving"] call isConfigOn) then
-			{
-				[] spawn fn_savePlayerData;
-			};
+		//player setVariable ["cmoney", _playerMoney - _price, true];
+		//[player, -_price] call A3W_fnc_setCMoney;
+		_playerMoneyText ctrlSetText format ["Cash: $%1", [player getVariable ["cmoney", 0]] call fn_numbersText];
+
+		if (["A3W_playerSaving"] call isConfigOn) then
+		{
+			[] spawn fn_savePlayerData;
 		};
 	};
 

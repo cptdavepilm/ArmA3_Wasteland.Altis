@@ -9,7 +9,7 @@
 if (!isServer) exitwith {};
 #include "mainMissionDefines.sqf";
 
-private ["_vehicle", "_vehicleName", "_vehDeterminer"];
+private ["_vehicle", "_vehicleName", "_vehDeterminer", "_variant"];
 
 // setupVars must be defined in the top mission file
 
@@ -20,7 +20,15 @@ _setupObjects =
 	// Class, Position, Fuel, Ammo, Damage, Special
 	_vehicle = [_vehicleClass, _missionPos] call createMissionVehicle;
 
-	switch (true) do
+	if (_vehicleClass isEqualType []) then
+	{
+		_variant = _vehicleClass param [1,"",[""]];
+		_vehicleClass = _vehicleClass select 0;
+	};
+
+	if (!isNil "_customVehicleSetup") then { call _customVehicleSetup };
+
+	/*switch (true) do
 	{
 		// GMG MRAPs
 		/*case ({ _vehicle isKindOf _x } count ["MRAP_01_gmg_base_F","MRAP_02_gmg_base_F","MRAP_03_gmg_base_F"] > 0):
@@ -30,7 +38,7 @@ _setupObjects =
 			// Reduce grenades to 50
 			_vehicle removeMagazines "96Rnd_40mm_G_belt";
 			_vehicle addMagazine ["96Rnd_40mm_G_belt", 50];
-		};*/
+		};//
 
 		// AMV-7 Marshall
 		case (_vehicle isKindOf "B_APC_Wheeled_01_cannon_F"):
@@ -163,7 +171,7 @@ _setupObjects =
 		_vehicle addMagazineTurret ["120Rnd_CMFlare_Chaff_Magazine", [-1]];
 	};
 
-	reload _vehicle;
+	reload _vehicle;*/
 
 	_aiGroup = createGroup CIVILIAN;
 	[_aiGroup, _missionPos, _nbUnits] call createCustomGroup;
@@ -189,8 +197,7 @@ _failedExec =
 _successExec =
 {
 	// Mission completed
-	_vehicle lock 1;
-	_vehicle setVariable ["R3F_LOG_disabled", false, true];
+	[_vehicle, 1] call A3W_fnc_setLockState; // Unlock
 
 	_successHintMessage = format ["The %1 has been captured, well done.", _vehicleName];
 };

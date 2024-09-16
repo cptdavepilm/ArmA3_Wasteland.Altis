@@ -41,10 +41,12 @@ player addEventHandler ["Put",
 
 				if (player getVariable ["cmoney", 0] > 0) then
 				{
-					_m = createVehicle ["Land_Money_F", getPosATL player, [], 0.5, "CAN_COLLIDE"];
-					_m setVariable ["cmoney", player getVariable "cmoney", true];
-					_m setVariable ["owner", "world", true];
-					player setVariable ["cmoney", 0, true];
+					// _m = createVehicle ["Land_Money_F", getPosATL player, [], 0.5, "CAN_COLLIDE"];
+					// _m setVariable ["cmoney", player getVariable "cmoney", true];
+					// _m setVariable ["owner", "world", true];
+					// player setVariable ["cmoney", 0, true];
+					// [_m] remoteExec ["A3W_fnc_setItemCleanup", 2];
+					["dropMoney", player, player getVariable ["cmoney", 0]] call A3W_fnc_processTransaction;
 				};
 			};
 
@@ -53,54 +55,94 @@ player addEventHandler ["Put",
 	};
 }];
 
-player addEventHandler ["WeaponDisassembled",
+//player addEventHandler ["WeaponDisassembled", { _this spawn weaponDisassembledEvent }]; // now handled in fn_inGameUIActionEvent.sqf
+player addEventHandler ["WeaponAssembled",
 {
-	_this spawn
+	params ["_player", "_obj"];
+
+	clearBackpackCargoGlobal _obj;
+	clearMagazineCargoGlobal _obj;
+	clearWeaponCargoGlobal _obj;
+	clearItemCargoGlobal _obj;
+
+	if (unitIsUAV _obj) then
 	{
-		_unit = _this select 0;
-		_bag1 = _this select 1;
-		_bag2 = _this select 2;
+		// Don't disable UAV thermal vision here, do it at the bottom of fn_createCrewUAV.sqf
 
-		_currBag = unitBackpack _unit;
+		_playerSide = side group _player;
 
-		titleText ['You are not allowed to disassemble static weapons.\nUse the "Move" option instead.', "PLAIN DOWN"];
-
-		_this spawn
+		if (side _obj != _playerSide && count crew _obj > 0) then
 		{
-			_bag1 = _this select 1;
-			_bag2 = _this select 2;
+			(crew _obj) joinSilent createGroup _playerSide;
+		};
 
-			_bag1Cont = objNull;
-			_bag2Cont = objNull;
+		if (isNil {_obj getVariable "ownerUID"}) then
+		{
+			_obj setVariable ["A3W_skipAutoSave", true, true]; // SKIPSAVE on first assembly
 
+			_obj allowDamage true;
+			_obj setVariable ["allowDamage", true, true];
+
+			[_obj, true] call A3W_fnc_setVehicleLoadout;
+		};
+
+		_obj setVariable ["ownerUID", getPlayerUID _player, true];
+		_obj setVariable ["ownerName", name _player, true];
+		_obj setPlateNumber name _player;
+
+		[_obj, _playerSide, true] call fn_createCrewUAV;
+
+		if (!alive getConnectedUAV _player) then
+		{
+			_player connectTerminalToUAV _obj;
+		};
+
+		if !(_obj getVariable ["A3W_skipAutoSave", false]) then
+		{
+			if (_obj isKindOf "AllVehicles" && !(_obj isKindOf "StaticWeapon")) then
 			{
-				if (_bag1 in everyBackpack _x) then { _bag1Cont = _x };
-				if (_bag2 in everyBackpack _x) then { _bag2Cont = _x };
-			} forEach nearestObjects [player, ["GroundWeaponHolder"], 10];
-
-			_bag1Cont hideObjectGlobal true;
-			_bag2Cont hideObjectGlobal true;
+				if (!isNil "fn_manualVehicleSave") then { _obj call fn_manualVehicleSave };
+			}
+			else
+			{
+				if (!isNil "fn_manualObjectSave") then { _obj call fn_manualObjectSave };
+			};
 		};
-
-		_unit action ["TakeBag", _bag1];
-
-		if (isNull _currBag) then
-		{
-			_time = time;
-			waitUntil {unitBackpack _unit == _bag1 || time - _time > 3};
-		};
-
-		_unit action ["Assemble", _bag2];
-
-		if (!isNull _currBag) then { _unit action ["TakeBag", _currBag] };
 	};
 }];
 
 player addEventHandler ["InventoryOpened",
 {
 	_obj = _this select 1;
-	if (!simulationEnabled _obj) then { _obj enableSimulation true };
-	_obj setVariable ["inventoryIsOpen", true];
+	_blocked = false;
+
+	if !(_obj isKindOf "Man") then
+	{
+		if ((locked _obj > 1 && _obj getVariable ["ownerUID","0"] != getPlayerUID player) ||
+		    (_obj getVariable ["A3W_inventoryLockR3F", false] && _obj getVariable ["R3F_LOG_disabled", false])) then
+		{
+			playSound "FD_CP_Not_Clear_F";
+
+			if (_obj isKindOf "AllVehicles") then
+			{
+				["This vehicle is locked.", 5] call mf_notify_client;
+			}
+			else
+			{
+				["This object is locked.", 5] call mf_notify_client;
+			};
+
+			_blocked = true;
+		};
+	};
+
+	if (!_blocked) then
+	{
+		if (!simulationEnabled _obj) then { _obj enableSimulation true };
+		_obj setVariable ["inventoryIsOpen", true];
+	};
+
+	_blocked
 }];
 
 player addEventHandler ["InventoryClosed",
@@ -109,44 +151,33 @@ player addEventHandler ["InventoryClosed",
 	_obj setVariable ["inventoryIsOpen", nil];
 }];
 
-// Manual GetIn/GetOut check because BIS is too lazy to implement GetInMan/GetOutMan, among a LOT of other things
 [] spawn
 {
-	_lastVeh = vehicle player;
-
-	while {true} do
+	waitUntil
 	{
-		_currVeh = vehicle player;
-
-		if (_lastVeh != _currVeh) then
+		// Prevent usage of commander camera
+		if (cameraView == "GROUP" && cameraOn in [player, vehicle player]) then
 		{
-			if (_currVeh != player) then
-			{
-				[_currVeh] call getInVehicle;
-			}
-			else
-			{
-				[_lastVeh] call getOutVehicle;
-			};
+			cameraOn switchCamera "EXTERNAL";
 		};
 
-		_lastVeh = _currVeh;
-		uiSleep 0.25;
+		false
 	};
 };
 
 player addEventHandler ["HandleDamage", unitHandleDamage];
 
-if (["A3W_combatAbortDelay", 0] call getPublicVar > 0) then
+if (["A3W_remoteBombStoreRadius", 0] call getPublicVar > 0) then
 {
 	player addEventHandler ["Fired",
 	{
-		// Remove remote explosives if within 100m of a store
+		// Remove explosives if within 100m of a store
 		if (_this select 1 == "Put") then
 		{
 			_ammo = _this select 4;
 
-			if ({_ammo isKindOf _x} count ["PipeBombBase", "ClaymoreDirectionalMine_Remote_Ammo"] > 0) then
+			//if ({_ammo isKindOf _x} count ["PipeBombBase", "ClaymoreDirectionalMine_Remote_Ammo"] > 0) then // "touchable" remote explosives only
+			if (_ammo isKindOf "TimeBombCore") then // all explosives
 			{
 				_mag = _this select 5;
 				_bomb = _this select 6;
@@ -156,15 +187,18 @@ if (["A3W_combatAbortDelay", 0] call getPublicVar > 0) then
 					if (_x getVariable ["storeNPC_setupComplete", false] && {_bomb distance _x < _minDist}) exitWith
 					{
 						deleteVehicle _bomb;
-						player addMagazine _mag;
+						[player, _mag] call fn_forceAddItem;
 						playSound "FD_CP_Not_Clear_F";
-						titleText [format ["You are not allowed to place remote explosives within %1m of a store.\nThe explosive has been re-added to your inventory.", _minDist], "PLAIN DOWN", 0.5];
+						titleText [format ["You are not allowed to place explosives within %1m of a store.\nThe explosive has been re-added to your inventory.", _minDist], "PLAIN DOWN", 0.5];
 					};
 				} forEach entities "CAManBase";
 			};
 		};
 	}];
+};
 
+if (["A3W_combatAbortDelay", 0] call getPublicVar > 0) then
+{
 	player addEventHandler ["FiredNear",
 	{
 		// Prevent aborting if event is not for placing an explosive
@@ -181,6 +215,9 @@ if (["A3W_combatAbortDelay", 0] call getPublicVar > 0) then
 		};
 	}];
 };
+
+player addEventHandler ["GetInMan", { [_this select 2] call getInVehicle }];
+player addEventHandler ["GetOutMan", { [_this select 2] call getOutVehicle }];
 
 _uid = getPlayerUID player;
 

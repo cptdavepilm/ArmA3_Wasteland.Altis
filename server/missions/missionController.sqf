@@ -8,8 +8,8 @@ if (!isServer) exitWith {};
 
 private ["_controllerNum", "_tempController", "_controllerSuffix", "_missionsFolder", "_missionDelay", "_availableMissions", "_missionsList", "_nextMission"];
 
-_controllerNum = [_this, 0, 1, [0]] call BIS_fnc_param;
-_tempController = [_this, 1, false, [false]] call BIS_fnc_param;
+_controllerNum = param [0, 1, [0]];
+_tempController = param [1, false, [false]];
 _controllerSuffix = "";
 
 if (_controllerNum > 1) then
@@ -49,7 +49,7 @@ while {true} do
 	diag_log format ["WASTELAND SERVER - %1 Mission%2 waiting to run: %3", MISSION_CTRL_TYPE_NAME, _controllerSuffix, _nextMission];
 
 	[
-		parseText format
+		format
 		[
 			"<t color='%1' shadow='2' size='1.75'>%2 Objective%3</t><br/>" +
 			"<t color='%1'>------------------------------</t><br/>" +
@@ -64,7 +64,8 @@ while {true} do
 
 	uiSleep _missionDelay;
 
-	private ["_setupVars", "_setupObjects", "_waitUntilMarkerPos", "_waitUntilExec", "_waitUntilCondition", "_failedExec", "_successExec"]; // these should be defined in the mission script
+	// these should be defined in the mission script
+	private ["_setupVars", "_setupObjects", "_waitUntilMarkerPos", "_waitUntilExec", "_waitUntilCondition", "_waitUntilSuccessCondition", "_ignoreAiDeaths", "_failedExec", "_successExec"];
 
 	[_controllerSuffix] call compile preprocessFileLineNumbers format ["server\missions\%1\%2.sqf", MISSION_CTRL_FOLDER, _nextMission];
 

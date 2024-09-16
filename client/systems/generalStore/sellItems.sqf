@@ -14,12 +14,7 @@ if (!isNil "storeSellingHandle" && {typeName storeSellingHandle == "SCRIPT"} && 
 storeSellingHandle = [] spawn
 {
 	disableSerialization;
-	private ["_getHalfPrice", "_playerMoney", "_size", "_dialog", "_itemlist", "_totalText", "_playerMoneyText", "_itemIndex", "_itemText", "_itemData", "_price"];
-
-	_getHalfPrice =
-	{
-		((ceil ((_this / 2) / 5)) * 5) // Ceil half the value to the nearest multiple of 5
-	};
+	private ["_playerMoney", "_size", "_dialog", "_itemlist", "_totalText", "_playerMoneyText", "_itemIndex", "_itemText", "_itemData", "_price"];
 
 	//Initialize Values
 	_playerMoney = player getVariable "cmoney";
@@ -36,12 +31,10 @@ storeSellingHandle = [] spawn
 	_itemText = _itemlist lbText _itemIndex;
 	_itemData = _itemlist lbData _itemIndex;
 
-	_price = 0;
-
 	{
 		if (_itemText == _x select 0 && _itemData == _x select 1) exitWith
 		{
-			_price = (_x select 5) call _getHalfPrice;
+			_price = _x select 5;
 		};
 	} forEach (call customPlayerItems);
 
@@ -49,9 +42,11 @@ storeSellingHandle = [] spawn
 	{
 		[_itemData, 1] call mf_inventory_remove;
 
-		player setVariable ["cmoney", _playerMoney + _price, true];
+		//player setVariable ["cmoney", _playerMoney + _price, true];
+		[player, _price] call A3W_fnc_setCMoney;
 		_playerMoneyText ctrlSetText format ["Cash: $%1", [player getVariable "cmoney"] call fn_numbersText];
 		[] execVM "client\systems\generalStore\getInventory.sqf";
+		playSound "FD_Finish_F";
 	};
 };
 

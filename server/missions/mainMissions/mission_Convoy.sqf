@@ -44,7 +44,18 @@ _setupObjects =
 
 		_vehicle = createVehicle [_type, _position, [], 0, "None"];
 		_vehicle setVariable ["R3F_LOG_disabled", true, true];
+		//_vehicle setVariable ["A3W_skipAutoSave", true, true];
 		[_vehicle] call vehicleSetup;
+
+		// apply tropical textures to vehicles on Tanoa
+		if (worldName == "Tanoa" && _type select [1,3] != "_T_") then
+		{
+			switch (toUpper (_type select [0,2])) do
+			{
+				case "B_": { [_vehicle, ["Olive"]] call applyVehicleTexture };
+				case "O_": { [_vehicle, ["GreenHex"]] call applyVehicleTexture };
+			};
+		};
 
 		_vehicle setDir _direction;
 		_aiGroup addVehicle _vehicle;
@@ -89,7 +100,7 @@ _setupObjects =
 	_leader = effectiveCommander (_vehicles select 0);
 	_aiGroup selectLeader _leader;
 
-	_aiGroup setCombatMode "GREEN"; // units will defend themselves
+	_aiGroup setCombatMode "YELLOW"; // units will defend themselves
 	_aiGroup setBehaviour "SAFE"; // units feel safe until they spot an enemy or get into contact
 	_aiGroup setFormation "STAG COLUMN";
 
@@ -101,7 +112,7 @@ _setupObjects =
 		_waypoint = _aiGroup addWaypoint [_x, 0];
 		_waypoint setWaypointType "MOVE";
 		_waypoint setWaypointCompletionRadius 25;
-		_waypoint setWaypointCombatMode "GREEN";
+		_waypoint setWaypointCombatMode "YELLOW";
 		_waypoint setWaypointBehaviour "SAFE"; // safe is the best behaviour to make AI follow roads, as soon as they spot an enemy or go into combat they WILL leave the road for cover though!
 		_waypoint setWaypointFormation "STAG COLUMN";
 		_waypoint setWaypointSpeed _speedMode;

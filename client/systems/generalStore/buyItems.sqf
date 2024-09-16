@@ -14,6 +14,8 @@ if (!isNil "storePurchaseHandle" && {typeName storePurchaseHandle == "SCRIPT"} &
 #define PURCHASED_CRATE_TYPE_AMMO 60
 #define PURCHASED_CRATE_TYPE_WEAPON 61
 
+#define CEIL_PRICE(PRICE) (ceil ((PRICE) / 5) * 5)
+
 storePurchaseHandle = _this spawn
 {
 	disableSerialization;
@@ -70,13 +72,13 @@ storePurchaseHandle = _this spawn
 	{
 		_itemText = _this select 0;
 
-		if ([_this, 1, false, [false]] call BIS_fnc_param) then
+		if (param [1, false, [false]]) then
 		{
 			_itemText = format ["Purchasing these %1 will replace your current ones.", _itemText];
 		}
 		else
 		{
-			if ([_this, 2, false, [false]] call BIS_fnc_param) then
+			if (param [2, false, [false]]) then
 			{
 				_itemText = format ["Purchasing this %1 will replace your current one.", _itemText];
 			}
@@ -100,7 +102,7 @@ storePurchaseHandle = _this spawn
 	{
 		_itemText = _this select 0;
 
-		if ([_this, 1, false, [false]] call BIS_fnc_param) then
+		if (param [1, false, [false]]) then
 		{
 			_itemText = format ["You already have these %1.", _itemText];
 		}
@@ -118,13 +120,14 @@ storePurchaseHandle = _this spawn
 	if (isNil "_price") then
 	{
 		{
-			if (_itemText == _x select 0 && _itemData == _x select 1) exitWith
+			if (_itemData == _x select 1) exitWith
 			{
 				_class = _x select 1;
 
 				if (_x select 3 == "vest") then
 				{
-					_price = [_class] call getCapacity;
+					([_class] call fn_getItemArmor) params ["_ballArmor", "_explArmor"];
+					_price = CEIL_PRICE(([_class] call getCapacity) / 2 + _ballArmor*3 + _explArmor*2); // price formula also defined in getItemInfo.sqf
 				}
 				else
 				{
@@ -145,6 +148,11 @@ storePurchaseHandle = _this spawn
 
 						if (_currentBinoc == "") then
 						{
+							if (_class select [0,15] == "Laserdesignator" && {{_x == "Laserbatteries"} count magazines player == 0}) then
+							{
+								[player, "Laserbatteries"] call fn_forceAddItem;
+							};
+
 							player addWeapon _class;
 						}
 						else
@@ -268,7 +276,7 @@ storePurchaseHandle = _this spawn
 	if (isNil "_price") then
 	{
 		{
-			if (_itemText == _x select 0 && _itemData == _x select 1) exitWith
+			if (_itemData == _x select 1) exitWith
 			{
 				_class = _x select 1;
 				_price = _x select 2;
@@ -280,7 +288,7 @@ storePurchaseHandle = _this spawn
 				};
 
 				_requestKey = call A3W_fnc_generateKey;
-				call requestStoreObject;
+				_x call requestStoreObject;
 			};
 		} forEach (call genObjectsArray);
 	};
@@ -316,7 +324,7 @@ storePurchaseHandle = _this spawn
 	if (isNil "_price") then
 	{
 		{
-			if (_itemText == _x select 0 && _itemData == _x select 1) exitWith
+			if (_itemData == _x select 1) exitWith
 			{
 				_class = _x select 1;
 				_price = _x select 2;
@@ -344,7 +352,7 @@ storePurchaseHandle = _this spawn
 	if (isNil "_price") then
 	{
 		{
-			if (_itemText == _x select 0 && _itemData == _x select 1) exitWith
+			if (_itemData == _x select 1) exitWith
 			{
 				_class = _x select 1;
 				_price = _x select 2;
@@ -364,7 +372,7 @@ storePurchaseHandle = _this spawn
 				if (uniform player != "" && {!(["uniform"] call _showReplaceConfirmMessage)}) exitWith {};
 
 				removeUniform player;
-				player addUniform _class;
+				player forceAddUniform _class;
 			};
 		} forEach (call uniformArray);
 	};
@@ -372,7 +380,7 @@ storePurchaseHandle = _this spawn
 	if (isNil "_price") then
 	{
 		{
-			if (_itemText == _x select 0 && _itemData == _x select 1) exitWith
+			if (_itemData == _x select 1) exitWith
 			{
 				_class = _x select 1;
 				_price = _x select 2;
@@ -405,7 +413,7 @@ storePurchaseHandle = _this spawn
 	if (isNil "_price") then
 	{
 		{
-			if (_itemText == _x select 0 && _itemData == _x select 1) exitWith
+			if (_itemData == _x select 1) exitWith
 			{
 				_class = _x select 1;
 				_price = _x select 2;
@@ -432,25 +440,21 @@ storePurchaseHandle = _this spawn
 
 	if (!isNil "_price" && {_price > -1}) then
 	{
-		_playerMoney = player getVariable ["cmoney", 0];
-
 		// Re-check for money after purchase
-		if (_price > _playerMoney) then
+		if (isNil "_requestKey" && _price > player getVariable ["cmoney", 0]) exitWith
 		{
-			if (!isNil "_requestKey" && {!isNil _requestKey}) then
-			{
-				deleteVehicle objectFromNetId (missionNamespace getVariable _requestKey);
-			};
-
 			[_itemText] call _showInsufficientFundsError;
-		}
-		else
-		{
-			player setVariable ["cmoney", _playerMoney - _price, true];
-			_playerMoneyText ctrlSetText format ["Cash: $%1", [player getVariable ["cmoney", 0]] call fn_numbersText];
-			if (_successHint) then { hint "Purchase successful!" };
-			playSound "FD_Finish_F";
 		};
+
+		//player setVariable ["cmoney", _playerMoney - _price, true];
+		if (isNil "_requestKey") then // baseparts price now handled in spawnStoreObject.sqf
+		{
+			[player, -_price] call A3W_fnc_setCMoney;
+		};
+
+		_playerMoneyText ctrlSetText format ["Cash: $%1", [player getVariable ["cmoney", 0]] call fn_numbersText];
+		if (_successHint) then { hint "Purchase successful!" };
+		playSound "FD_Finish_F";
 	};
 
 	if (!isNil "_requestKey" && {!isNil _requestKey}) then

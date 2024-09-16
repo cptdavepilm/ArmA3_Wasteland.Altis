@@ -4,17 +4,17 @@
 //	@file Name: towingHelper.sqf
 //	@file Author: AgentRev
 
-private ["_type", "_veh", "_pos"];
+params [["_type","",[""]], ["_veh",objNull,["",objNull]]];
 
-_type = [_this, 0, "", [""]] call BIS_fnc_param;
-_veh = [_this, 1, objNull, ["",objNull]] call BIS_fnc_param;
-
-if (typeName _veh == "STRING") then
+if (_veh isEqualType "") then
 {
 	_veh = objectFromNetId _veh;
 };
 
-if (!local _veh) exitWith {};
+if (!local _veh) exitWith
+{
+	_this remoteExecCall ["A3W_fnc_towingHelper", _veh];
+};
 
 switch (_type) do
 {
@@ -22,14 +22,11 @@ switch (_type) do
 	{
 		_veh enableSimulation true;
 		(attachedTo _veh) enableSimulation true;
-
-		sleep 0.3;
 		detach _veh;
 
-		_veh lockDriver false;
-		_veh enableCopilot true;
+		["enableDriving", _veh] call A3W_fnc_towingHelper;
 
-		_pos = getPosATL _veh;
+		private _pos = getPosATL _veh;
 
 		if (_pos select 2 < 0) then
 		{
@@ -41,15 +38,19 @@ switch (_type) do
 	{
 		_veh lockDriver true;
 	};
+	case "unlockDriver":
+	{
+		_veh lockDriver false;
+	};
 	case "disableDriving":
 	{
-		_veh lockDriver true;
+		if (!unitIsUAV _veh) then { _veh lockDriver true };
 		_veh enableCopilot false;
 		_veh engineOn false;
-
-		if (!isNull player) then
-		{
-			player action ["EngineOff", _veh];
-		};
+	};
+	case "enableDriving":
+	{
+		if (!isAgent teamMember driver _veh) then { _veh lockDriver false }; // isAgent == driverAssist active
+		_veh enableCopilot true;
 	};
 };

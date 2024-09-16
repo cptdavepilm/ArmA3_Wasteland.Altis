@@ -57,7 +57,7 @@ storePurchaseHandle = _this spawn
 		case 0:
 		{
 			{
-				if (_itemText == _x select 0 && _itemData == _x select 1) exitWith
+				if (_itemData == _x select 1) exitWith
 				{
 					_class = _x select 1;
 					_price = _x select 2;
@@ -84,7 +84,8 @@ storePurchaseHandle = _this spawn
 
 	if (!isNil "_price" && {_price > -1}) then
 	{
-		player setVariable ["cmoney", _playerMoney - _price, true];
+		//player setVariable ["cmoney", _playerMoney - _price, true];
+		[player, -_price] call A3W_fnc_setCMoney;
 		_playerMoneyText ctrlSetText format ["Cash: $%1", [player getVariable ["cmoney", 0]] call fn_numbersText];
 		hint "Purchase successful!";
 		playSound "FD_Finish_F";

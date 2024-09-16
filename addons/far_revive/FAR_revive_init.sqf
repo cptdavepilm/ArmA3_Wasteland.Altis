@@ -13,12 +13,12 @@ if (isDedicated) exitWith {};
 #include "FAR_defines.sqf"
 #include "gui_defines.hpp"
 
-call compile preprocessFile "addons\far_revive\FAR_revive_funcs.sqf";
+call compile preprocessFileLineNumbers "addons\far_revive\FAR_revive_funcs.sqf";
 
 FAR_isDragging = false;
 FAR_isDragging_EH = [];
 FAR_deathMessage = [];
-FAR_Debugging = false;
+FAR_Debugging = true;
 
 FAR_Reset_Unit =
 {
@@ -26,7 +26,15 @@ FAR_Reset_Unit =
 	_this setVariable ["FAR_isStabilized", 0, true];
 	_this setVariable ["FAR_iconBlink", nil, true];
 	_this setVariable ["FAR_draggedBy", nil, true];
+	_this setVariable ["FAR_isDragging", nil, true];
 	_this setVariable ["FAR_treatedBy", nil, true];
+	_this setVariable ["FAR_isTreating", nil];
+	_this setVariable ["FAR_cancelAutoEject", nil, true];
+	_this setVariable ["FAR_handleStabilize", nil, true];
+	_this setVariable ["FAR_reviveModeReady", nil];
+	_this setVariable ["FAR_injuryBroadcast", nil];
+	_this setVariable ["FAR_headshotHitTimeout", nil];
+	_this setUnconscious false;
 	_this setCaptive false;
 
 	if (isPlayer _this) then
@@ -41,8 +49,32 @@ FAR_Reset_Unit =
 }
 call mf_compile;
 
+FAR_Reset_Killer_Info =
+{
+	[
+		_this,
+		[
+			["FAR_killerVehicle", nil],
+			["FAR_killerVehicleClass", nil],
+			["FAR_killerUnit", nil],
+			["FAR_killerName", nil],
+			["FAR_killerUID", nil],
+			["FAR_killerGroup", nil],
+			["FAR_killerSide", nil],
+			["FAR_killerFriendly", nil],
+			["FAR_killerAI", nil],
+			["FAR_killerWeapon", nil],
+			["FAR_killerAmmo", nil],
+			["FAR_killerDistance", nil],
+			["FAR_killerSuspects", nil]
+		]
+	] call A3W_fnc_setVarServer;
+}
+call mf_compile;
+
 FAR_Player_Init =
 {
+	player call FAR_Reset_Killer_Info;
 	player call FAR_Reset_Unit;
 	call FAR_Player_Actions;
 }
@@ -128,19 +160,18 @@ FAR_findKiller = "addons\far_revive\FAR_findKiller.sqf" call mf_compile;
 	};*/
 
 	// Event Handlers
-	player addEventHandler ["Respawn", { [] spawn FAR_Player_Init }];
+	player addEventHandler ["Respawn", FAR_Player_Init];
 	player addEventHandler
 	[
 		"Killed",
 		{
-			if (!isNil "FAR_Player_Unconscious_thread" && {!scriptDone FAR_Player_Unconscious_thread}) then
-			{
-				terminate FAR_Player_Unconscious_thread;
-				closeDialog ReviveBlankGUI_IDD;
-				closeDialog ReviveGUI_IDD;
-				FAR_cutTextLayer cutText ["", "PLAIN"];
-				//(FAR_cutTextLayer + 1) cutText ["", "PLAIN"];
-			};
+			//terminate (player getVariable ["FAR_Player_Unconscious_thread", scriptNull]);
+			(findDisplay ReviveBlankGUI_IDD) closeDisplay 0;
+			//(findDisplay ReviveGUI_IDD) closeDisplay 0;
+			(uiNamespace getVariable ["ReviveGUI", displayNull]) closeDisplay 0;
+			FAR_cutTextLayer cutText ["", "PLAIN"];
+			(FAR_cutTextLayer + 1) cutText ["", "PLAIN"];
+			(ReviveGUI_IDD + 9) cutText ["", "PLAIN"];
 
 			player call FAR_Reset_Unit;
 			player allowDamage true;
@@ -149,16 +180,33 @@ FAR_findKiller = "addons\far_revive\FAR_findKiller.sqf" call mf_compile;
 };
 
 ////////////////////////////////////////////////
-// [Debugging] Add revive to playable AI units
+// [Debugging] Add revive to group AI units
 ////////////////////////////////////////////////
 if (!FAR_Debugging) exitWith {};
 
+FAR_Init_AI_Debug =
 {
-	if (!isPlayer _x) then
+	_this addEventHandler ["HandleDamage", unitHandleDamage];
+	_this addEventHandler ["Killed", { terminate ((_this select 0) getVariable ["FAR_Player_Unconscious_thread", scriptNull]) }];
+	_this setVariable ["FAR_isUnconscious", 0, true];
+	_this setVariable ["FAR_isStabilized", 0, true];
+	_this setVariable ["FAR_draggedBy", objNull, true];
+	_this setVariable ["playerSpawning", false, true];
+	[_this] call fn_remotePlayerSetup;
+	_this setVariable ["FAR_aiDebugSetup", true];
+}
+call mf_compile;
+
+[] spawn
+{
+	while {true} do
 	{
-		_x addEventHandler ["HandleDamage", FAR_HandleDamage_EH];
-		_x setVariable ["FAR_isUnconscious", 0, true];
-		_x setVariable ["FAR_isStabilized", 0, true];
-		_x setVariable ["FAR_draggedBy", objNull, true];
+		{
+			if (alive _x && local _x && !isPlayer _x && isNil {_x getVariable "FAR_aiDebugSetup"}) then
+			{
+				_x call FAR_Init_AI_Debug
+			};
+		} forEach units group player;
+		uiSleep 5;
 	};
-} forEach switchableUnits;
+};

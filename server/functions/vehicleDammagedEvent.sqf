@@ -4,28 +4,15 @@
 //	@file Name: vehicleDammagedEvent.sqf
 //	@file Author: AgentRev
 
-_veh = _this select 0;
+params ["_veh"];
 
 if (local _veh) then
 {
-	_dmg = _veh getHitPointDamage "HitEngine";
+	_engine1 = _veh getHitPointDamage "HitEngine";
+	_engine2 = _veh getHitPointDamage "HitEngine2";
 
-	if (!isNil "_dmg" && {_dmg >= 0.9}) then
+	if (!isNil "_engine1" && {_engine1 > 0.9 && (isNil "_engine2" || {_engine2 > 0.9})}) then
 	{
 		_veh engineOn false;
-
-		_driver = (crew _veh) select 0;
-
-		if (!isNil "_driver") then
-		{
-			_driver action ["EngineOff", _veh];
-		};
-
-		_dmg = _veh getHitPointDamage "HitHull";
-
-		if (!isNil "_dmg" && {_dmg < 0.5}) then
-		{
-			_veh setHitPointDamage ["HitHull", 0.5];
-		};
 	};
 };

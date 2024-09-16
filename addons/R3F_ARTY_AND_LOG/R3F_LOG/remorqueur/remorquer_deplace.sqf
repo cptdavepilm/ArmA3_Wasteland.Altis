@@ -8,6 +8,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define VEHICLE_UNLOCKED(VEH) (locked (VEH) < 2 || (VEH) getVariable ["ownerUID","0"] isEqualTo getPlayerUID player)
+
 if (R3F_LOG_mutex_local_verrou) then
 {
 	player globalChat STR_R3F_LOG_mutex_action_en_cours;
@@ -28,21 +30,14 @@ else
 	{
 		_remorqueur = _remorqueur select 0;
 
-		if (alive _remorqueur && isNull (_remorqueur getVariable "R3F_LOG_remorque") && ((velocity _remorqueur) call BIS_fnc_magnitude < 6) && (getPos _remorqueur select 2 < 2) && !(_remorqueur getVariable "R3F_LOG_disabled")) then
+		if (alive _remorqueur && isNull (_remorqueur getVariable "R3F_LOG_remorque") && (vectorMagnitude velocity _remorqueur < 6) && (getPos _remorqueur select 2 < 2) && VEHICLE_UNLOCKED(_remorqueur) && !(_remorqueur getVariable "R3F_LOG_disabled")) then
 		{
 			// On mémorise sur le réseau que le véhicule remorque quelque chose
 			_remorqueur setVariable ["R3F_LOG_remorque", _objet, true];
 			// On mémorise aussi sur le réseau que le canon est attaché en remorque
 			_objet setVariable ["R3F_LOG_est_transporte_par", _remorqueur, true];
 
-			if (local _objet) then
-			{
-				_objet lockDriver true;
-			}
-			else
-			{
-				[["lockDriver", netId _objet], "A3W_fnc_towingHelper", _objet] call A3W_fnc_MP;
-			};
+			["disableDriving", _objet] call A3W_fnc_towingHelper;
 
 			_towerBB = _remorqueur call fn_boundingBoxReal;
 			_towerMinBB = _towerBB select 0;
@@ -73,9 +68,7 @@ else
 				detach player;
 			};
 
-			// Faire relacher l'objet au joueur (si il l'a dans "les mains")
-			R3F_LOG_joueur_deplace_objet = objNull;
-			player playMove "AinvPknlMstpSlayWrflDnon_medic";
+			[player, "AinvPknlMstpSlayWrflDnon_medic"] call switchMoveGlobal;
 			sleep 2;
 
 			// Attacher à l'arrière du véhicule au ras du sol
@@ -88,10 +81,12 @@ else
 				(_towerGroundPos select 2) - (_objectMinBB select 2) + 0.1
 			]];
 
+			// Faire relacher l'objet au joueur (si il l'a dans "les mains")
+			R3F_LOG_joueur_deplace_objet = objNull;
 			detach player;
 
 			// Si l'objet est une arme statique, on corrige l'orientation en fonction de la direction du canon
-			if (_objet isKindOf "StaticWeapon") then
+			/*if (_objet isKindOf "StaticWeapon") then
 			{
 				private ["_azimut_canon"];
 
@@ -113,9 +108,14 @@ else
 				{
 					publicVariable "R3F_ARTY_AND_LOG_PUBVAR_setDir";
 				};
-			};
+			};*/
 
 			sleep 5;
+
+			if (isNull objectParent player) then
+			{
+				[player, ""] call switchMoveGlobal;
+			};
 		};
 	};
 

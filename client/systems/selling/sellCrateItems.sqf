@@ -11,14 +11,14 @@
 
 storeSellingHandle = _this spawn
 {
-	_params = [_this, 3, [], [[]]] call BIS_fnc_param;
-	_storeSellBox = [_params, 0, false, [false]] call BIS_fnc_param;
-	_forceSell = [_params, 1, false, [false]] call BIS_fnc_param;
-	_deleteObject = [_params, 2, false, [false]] call BIS_fnc_param;
+	_params = param [3, [], [[]]];
+	_storeSellBox = _params param [0, false, [false]];
+	_forceSell = _params param [1, false, [false]];
+	_deleteObject = _params param [2, false, [false]];
 
 	_crate = if (_storeSellBox) then
 	{
-		[_this, 0, objNull, [objNull]] call BIS_fnc_param
+		param [0, objNull, [objNull]]
 	}
 	else
 	{
@@ -64,7 +64,8 @@ storeSellingHandle = _this spawn
 		clearWeaponCargoGlobal _crate;
 		clearItemCargoGlobal _crate;
 
-		player setVariable ["cmoney", (player getVariable ["cmoney", 0]) + _sellValue, true];
+		//player setVariable ["cmoney", (player getVariable ["cmoney", 0]) + _sellValue, true];
+		[player, _sellValue] call A3W_fnc_setCMoney;
 		hint format [format ['The inventory of "%1" was sold for $%2', _objName, _sellValue]];
 		playSound "FD_Finish_F";
 	}
@@ -81,7 +82,7 @@ storeSellingHandle = _this spawn
 			if (_itemQty > 0 && {count _x > 2}) then
 			{
 				_itemName = _x select 2;
-				_confirmMsg = _confirmMsg + format ["<br/><t font='EtelkaMonospaceProBold'>%1</t> x %2%3", _itemQty, _itemName, if (PRICE_DEBUGGING) then { format [" ($%1)", [_x select 3] call fn_numbersText] } else { "" }];
+				_confirmMsg = _confirmMsg + format ["<br/>%1 x  %2%3", _itemQty, _itemName, if (PRICE_DEBUGGING) then { format [" ($%1)", [_x select 3] call fn_numbersText] } else { "" }];
 			};
 		} forEach _allCrateItems;
 
@@ -100,6 +101,11 @@ storeSellingHandle = _this spawn
 					clearItemCargoGlobal _this;
 				};
 
+				{
+					_x params ["", "_item"];
+					_crate setVariable [_item, nil, true];
+				} forEach call customPlayerItems;
+
 				waitUntil {scriptDone _clearing};
 
 				if (_deleteObject) then
@@ -116,7 +122,8 @@ storeSellingHandle = _this spawn
 					};
 				};
 
-				player setVariable ["cmoney", (player getVariable ["cmoney", 0]) + _sellValue, true];
+				//player setVariable ["cmoney", (player getVariable ["cmoney", 0]) + _sellValue, true];
+				[player, _sellValue] call A3W_fnc_setCMoney;
 
 				_hintMsg = if (_deleteObject) then { 'You sold "%1" for $%2' } else { 'You sold the inventory of "%1" for $%2' };
 				hint format [_hintMsg, _objName, _sellValue];

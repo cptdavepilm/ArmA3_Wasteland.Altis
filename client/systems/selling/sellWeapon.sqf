@@ -40,7 +40,7 @@ storeSellingHandle = [] spawn
 		{
 			_sellValue = GET_HALF_PRICE(_x select 2);
 		};
-	} forEach (call allGunStoreFirearms);
+	} forEach (call allGunStoreFirearms + call genItemArray);
 
 	_magsToSell = [];
 
@@ -67,7 +67,7 @@ storeSellingHandle = [] spawn
 	};
 
 	// Add weapon name to confirm message
-	_confirmMsg = format ["<t font='EtelkaMonospaceProBold'>1</t> x %1", getText (configFile >> "CfgWeapons" >> _currWep >> "displayName")];
+	_confirmMsg = format ["1 x  %1", getText (configFile >> "CfgWeapons" >> _currWep >> "displayName")];
 
 	// Add ammo-based price of magazines to total sell value, and their names to confirm message
 	{
@@ -90,7 +90,7 @@ storeSellingHandle = [] spawn
 			_sellValue = _sellValue + GET_HALF_PRICE(_magValue * (_x / _magFullAmmo)); // Get selling price relative to ammo count
 		} forEach _magAmmos;
 
-		_confirmMsg = _confirmMsg + "<br/><t font='EtelkaMonospaceProBold'>" + str count _magAmmos + "</t> x " + _magName;
+		_confirmMsg = _confirmMsg + "<br/>" + str count _magAmmos + " x  " + _magName;
 
 	} forEach _magsToSell;
 
@@ -112,7 +112,7 @@ storeSellingHandle = [] spawn
 			} forEach (call accessoriesArray);
 
 			_sellValue = _sellValue + _itemValue;
-			_confirmMsg = _confirmMsg + "<br/><t font='EtelkaMonospaceProBold'>1</t> x " + _itemName;
+			_confirmMsg = _confirmMsg + "<br/>1 x  " + _itemName;
 		};
 	} forEach _itemsToSell;
 
@@ -132,9 +132,15 @@ storeSellingHandle = [] spawn
 		player removeWeapon _currWep;
 
 		// Remove sold inventory magazines
-		//{ player removeMagazines _x } forEach _invMagsToRemove;
+		{
+			for "_i" from 1 to (_x select 1) do
+			{
+				player removeMagazine (_x select 0);
+			};
+		} forEach _invMagsToRemove;
 
-		player setVariable ["cmoney", (player getVariable ["cmoney", 0]) + _sellValue, true];
+		//player setVariable ["cmoney", (player getVariable ["cmoney", 0]) + _sellValue, true];
+		[player, _sellValue] call A3W_fnc_setCMoney;
 		hint format ["You sold your gun for $%1", [_sellValue] call fn_numbersText];
 	};
 };

@@ -28,13 +28,13 @@ if (_uid call isAdmin) then
 	_playerData = _playerListBox lbData _index;
 
 	{
-		if (str(_x) == _playerData) then {
+		if (getPlayerUID _x == _playerData) exitWith
+		{
 			_target = _x;
-			_check = 1;
 		};
-	} forEach playableUnits;
+	} forEach allPlayers;
 
-	if (_check == 0) exitWith{};
+	if (isNil "_target" || {isNull _target}) exitWith{};
 
 	switch (_switch) do
 	{
@@ -43,37 +43,25 @@ if (_uid call isAdmin) then
 			if (!isNil "_target") then
 			{
 				_spectating = ctrlText _spectateButton;
-				if (_spectating == "Spectate") then {
-					_spectateButton ctrlSetText "Spectating";
-					//player commandChat format ["Viewing %1.", name _target];
-
-					if (!isNil "_camadm") then { camDestroy _camadm; };
-					_camadm = "camera" camCreate ([(position vehicle _target select 0) - 5,(position vehicle _target select 1), (position vehicle _target select 2) + 10]);
-					_camadm cameraEffect ["external", "TOP"];
-					_camadm camSetTarget (vehicle _target);
-					_camadm camCommit 1;
-
-					_rnum = 0;
-					while {ctrlText _spectateButton == "Spectating"} do {
-						switch (_rnum) do
-						{
-							if (daytime > 19 || daytime < 5) then {camUseNVG true;} else {camUseNVG false;};
-							case 0: {detach _camadm; _camadm attachTo [(vehicle _target), [0,-10,4]]; _camadm setVectorUp [0, 1, 5];};
-							case 1: {detach _camadm; _camadm attachTo [(vehicle _target), [0,10,4]]; _camadm setDir 180; _camadm setVectorUp [0, 1, -5];};
-							case 2: {detach _camadm; _camadm attachTo [(vehicle _target), [0,1,50]]; _camadm setVectorUp [0, 50, 1];};
-							case 3: {detach _camadm; _camadm attachTo [(vehicle _target), [-10,0,2]]; _camadm setDir 90; _camadm setVectorUp [0, 1, 5];};
-							case 4: {detach _camadm; _camadm attachTo [(vehicle _target), [10,0,2]]; _camadm setDir -90; _camadm setVectorUp [0, 1, -5];};
-						};
-						player commandchat "Viewing cam " + str(_rnum) + " on " + str(name vehicle _target);
-						_rnum = _rnum + 1;
-						if (_rnum > 4) then {_rnum = 0;};
-						sleep 5;
+				if (_spectating == "Spectate") then
+				{
+					if (!([player] call camera_enabled)) then
+					{
+						[] call camera_toggle;
+						["PlayerMgmt_Spectate", format ["%1 (%2)", name _target, getPlayerUID _target]] call notifyAdminMenu;
 					};
+
+					[player, _target] call camera_attach_to_target;
+					player commandChat format ["Viewing %1.", name _target];
+					_spectateButton ctrlSetText "Spectating";
 				} else {
 					_spectateButton ctrlSetText "Spectate";
-					player commandchat format ["No Longer Viewing.", name _target];
-					player cameraEffect ["terminate","back"];
-					if (!isNil "_camadm") then { camDestroy _camadm; };
+					player commandChat format ["No Longer Viewing.", name _target];
+
+					if ([player] call camera_enabled) then
+					{
+						[] call camera_toggle;
+					};
 				};
 			};
 		};
@@ -82,36 +70,41 @@ if (_uid call isAdmin) then
 			_warnText = ctrlText _warnMessage;
 			_playerName = name player;
 			[format ["Message from Admin: %1", _warnText], "A3W_fnc_titleTextMessage", _target, false] call A3W_fnc_MP;
+			["PlayerMgmt_Warn", format ["%1 (%2) - %3", name _target, getPlayerUID _target, _warnText]] call notifyAdminMenu;
 		};
 		case 2: //Slay
 		{
-			_target setDamage 1;
+			if (damage _target < 1) then // if check required to prevent "Killed" EH from getting triggered twice
+			{
+				_target setVariable ["A3W_deathCause_remote", ["forcekill",serverTime], true];
+				_target setDamage 1;
+			};
+
+			["PlayerMgmt_Slay", format ["%1 (%2)", name _target, getPlayerUID _target]] call notifyAdminMenu;
 		};
 		case 3: //Unlock Team Switcher
 		{
 			pvar_teamSwitchUnlock = getPlayerUID _target;
 			publicVariableServer "pvar_teamSwitchUnlock";
+			["PlayerMgmt_UnlockTeamSwitch", format ["%1 (%2)", name _target, getPlayerUID _target]] call notifyAdminMenu;
 		};
 		case 4: //Unlock Team Killer
 		{
-			_targetUID = getPlayerUID _target;
-			{
-				if(_x select 0 == _targetUID) then
-				{
-					pvar_teamKillList = [pvar_teamKillList, _forEachIndex] call BIS_fnc_removeIndex;
-					publicVariable "pvar_teamKillList";
-				};
-			}forEach pvar_teamKillList;
+			pvar_teamKillUnlock = getPlayerUID _target;
+			publicVariableServer "pvar_teamKillUnlock";
+			["PlayerMgmt_UnlockTeamKill", format ["%1 (%2)", name _target, getPlayerUID _target]] call notifyAdminMenu;
 		};
 		case 5: //Remove All Money
 		{
-			_targetUID = getPlayerUID _target;
+			/*_targetUID = getPlayerUID _target;
 			{
 				if(getPlayerUID _x == _targetUID) exitWith
 				{
 					_x setVariable["cmoney",0,true];
 				};
 			}forEach playableUnits;
+			["PlayerMgmt_RemoveMoney", format ["%1 (%2)", name _target, getPlayerUID _target]] call notifyAdminMenu;*/
+			["This option has been disabled since money is now server-sided."] spawn BIS_fnc_guiMessage;
 		};
 		case 6: //Remove All Weapons
 		{

@@ -9,7 +9,7 @@
 
 private ["_marker", "_preload", "_pos", "_rad", "_townName", "_playerPos"];
 _marker = _this select 0;
-_preload = [_this, 1, false, [false]] call BIS_fnc_param;
+_preload = param [1, false, [false]];
 
 {
 	if (_x select 0 == _marker) exitWith
@@ -20,9 +20,15 @@ _preload = [_this, 1, false, [false]] call BIS_fnc_param;
 
 		_playerPos = [_pos,5,_rad,1,0,0,0] call findSafePos;
 		if (_preload) then { waitUntil {sleep 0.1; preloadCamera _playerPos} };
+
+		waitUntil {!isNil "bis_fnc_init" && {bis_fnc_init}};
+
 		player setPos _playerPos;
 	};
 } forEach (call cityList);
+
+player setVariable [_marker + "_lastSpawn", diag_tickTime];
+[player, _marker] remoteExecCall ["A3W_fnc_updateSpawnTimestamp", 2];
 
 respawnDialogActive = false;
 closeDialog 0;

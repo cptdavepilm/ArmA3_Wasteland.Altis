@@ -37,39 +37,57 @@ if (_uid call isAdmin) then
 					closeDialog 0;
 					execVM "client\systems\adminPanel\vehicleManagement.sqf";
 				};
-				case 2: //Tags
+				case 2: //Markers log
+				{
+					closeDialog 0;
+					createDialog "MarkerLog";
+				};
+				case 3: //Tags
 				{
 					execVM "client\systems\adminPanel\playerTags.sqf";
 				};
-				case 3: //Teleport
+				case 4: //Teleport
 				{
 					closeDialog 0;
 					["A3W_teleport", "onMapSingleClick",
 					{
-						vehicle player setPos _pos;
+						private "_waterPos";
+						if (surfaceIsWater _pos) then
+						{
+							_top = +_pos;
+							_top set [2, (_top select 2) + 1000];
+							_buildings = (lineIntersectsSurfaces [_top, _pos, objNull, objNull, true, -1, "GEOM", "NONE"]) select {(_x select 2) isKindOf "Building"};
+
+							if !(_buildings isEqualTo []) then
+							{
+								_waterPos = _buildings select 0 select 0;
+							};
+						};
+						if (isNil "_waterPos") then { vehicle player setPos _pos } else { vehicle player setPosASL _waterPos };
 						if (!isNil "notifyAdminMenu") then { ["teleport", _pos] spawn notifyAdminMenu };
 						["A3W_teleport", "onMapSingleClick"] call BIS_fnc_removeStackedEventHandler;
 						true
 					}] call BIS_fnc_addStackedEventHandler;
 					hint "Click on map to teleport";
 				};
-				case 4: //Money
+				case 5: //Money
 				{
 					_money = 5000;
-					player setVariable ["cmoney", (player getVariable ["cmoney",0]) + _money, true];
+					//player setVariable ["cmoney", (player getVariable ["cmoney",0]) + _money, true];
+					[player, _money] call A3W_fnc_setCMoney;
 					if (!isNil "notifyAdminMenu") then { ["money", _money] call notifyAdminMenu };
 				};
-				case 5: //Debug Menu
+				case 6: //Debug Menu
 				{
 					closeDialog 0;
 					execVM "client\systems\adminPanel\loadDebugMenu.sqf";
 				};
-				case 6: //Object search menu
+				case 7: //Object search menu
 				{
 					closeDialog 0;
 					execVM "client\systems\adminPanel\loadObjectSearch.sqf";
 				};
-				case 7: // toggle God mode
+				case 8: // toggle God mode
 				{
 					execVM "client\systems\adminPanel\toggleGodMode.sqf";
 				};
@@ -84,33 +102,38 @@ if (_uid call isAdmin) then
 				case 0: //Access Gun Store
 				{
 					closeDialog 0;
-					execVM "client\systems\gunStore\loadGunStore.sqf";
+					[] call loadGunStore;
 				};
 				case 1: //Access General Store
 				{
 					closeDialog 0;
-					execVM "client\systems\generalStore\loadGenStore.sqf";
+					[] call loadGeneralStore;
 				};
 				case 2: //Access Vehicle Store
 				{
 					closeDialog 0;
-					execVM "client\systems\vehicleStore\loadVehicleStore.sqf";
+					[] call loadVehicleStore;
 				};
-				case 3: //Access Respawn Dialog
+				case 3: //Access ATM Dialog
+				{
+					closeDialog 0;
+					call mf_items_atm_access;
+				};
+				case 4: //Access Respawn Dialog
 				{
 					closeDialog 0;
 					true spawn client_respawnDialog;
 				};
-				case 4: //Access Proving Grounds
+				case 5: //Access Proving Grounds
 				{
 					closeDialog 0;
 					createDialog "balca_debug_main";
 				};
-				case 5: //Show server FPS function
+				case 6: //Show server FPS function
 				{
 					hint format["Server FPS: %1",serverFPS];
 				};
-				case 6: //Test Function
+				case 7: //Test Function
 				{
 					_group = createGroup civilian;
 					_leader = _group createunit ["C_man_polo_1_F", getPos player, [], 0.5, "Form"];

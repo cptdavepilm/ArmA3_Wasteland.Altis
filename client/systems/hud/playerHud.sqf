@@ -85,24 +85,22 @@ _displayTerritoryActivity =
 	[_topLeftIconText, _activityMessage]
 };
 
+_survivalSystem = ["A3W_survivalSystem"] call isConfigOn;
 _unlimitedStamina = ["A3W_unlimitedStamina"] call isConfigOn;
+_atmEnabled = ["A3W_atmEnabled"] call isConfigOn;
+_disableUavFeed = ["A3W_disableUavFeed"] call isConfigOn;
 
-private ["_globalVoiceTimer", "_globalVoiceWarnTimer", "_globalVoiceWarning", "_globalVoiceMaxWarns", "_globalVoiceTimestamp"];
-
-_globalVoiceTimer = 0;
-_globalVoiceWarnTimer = ["A3W_globalVoiceWarnTimer", 5] call getPublicVar;
-_globalVoiceWarning = 0;
-_globalVoiceMaxWarns = ceil (["A3W_globalVoiceMaxWarns", 5] call getPublicVar);
-
-private "_uavMapCtrl";
-_uavMapCtrl = controlNull;
+private ["_mapCtrls", "_mapCtrl"];
+_ui = displayNull;
 
 while {true} do
 {
-	private ["_ui","_vitals","_hudVehicle","_health","_tempString","_yOffset","_vehicle"];
+	if (isNull _ui) then
+	{
+		1000 cutRsc ["WastelandHud","PLAIN"];
+		_ui = uiNamespace getVariable ["WastelandHud", displayNull];
+	};
 
-	1000 cutRsc ["WastelandHud","PLAIN"];
-	_ui = uiNameSpace getVariable "WastelandHud";
 	_vitals = _ui displayCtrl hud_status_idc;
 	_hudVehicle = _ui displayCtrl hud_vehicle_idc;
 	_hudActivityIcon = _ui displayCtrl hud_activity_icon_idc;
@@ -127,6 +125,7 @@ while {true} do
 		{
 			// Gone up. Green flash
 			_healthTextColor = "#17FF17";
+			if (!isNil "BIS_HitCC" && {ppEffectEnabled BIS_HitCC}) then { BIS_HitCC ppEffectEnable false }; // fix for permanent red borders due to fire damage
 		};
 	};
 
@@ -134,59 +133,78 @@ while {true} do
 	_lastHealthReading = _health;
 
 	// Icons in bottom right
-	_str = if (_unlimitedStamina) then {
-		""
-	} else {
-		format ["%1 <img size='0.7' image='client\icons\running_man.paa'/>", 100 - ceil((getFatigue player) * 100)];
+
+	_strArray = [];
+
+	if (_atmEnabled) then {
+		_strArray pushBack format ["%1 <img size='0.7' image='client\icons\suatmm_icon.paa'/>", [player getVariable ["bmoney", 0]] call fn_numbersText];
 	};
-	_str = _str + format ["<br/>%1 <img size='0.7' image='client\icons\money.paa'/>", [player getVariable ["cmoney", 0]] call fn_numbersText];
-	_str = _str + format ["<br/>%1 <img size='0.7' image='client\icons\water.paa'/>", ceil (thirstLevel max 0)];
-	_str = _str + format ["<br/>%1 <img size='0.7' image='client\icons\food.paa'/>", ceil (hungerLevel max 0)];
-	_str = _str + format ["<br/><t color='%1'>%2</t> <img size='0.7' image='client\icons\health.paa'/>", _healthTextColor, _health];
+
+	_strArray pushBack format ["%1 <img size='0.7' image='client\icons\money.paa'/>", [player getVariable ["cmoney", 0]] call fn_numbersText];
+
+	if (_survivalSystem) then {
+		_strArray pushBack format ["%1 <img size='0.7' image='client\icons\water.paa'/>", ceil (thirstLevel max 0)];
+		_strArray pushBack format ["%1 <img size='0.7' image='client\icons\food.paa'/>", ceil (hungerLevel max 0)];
+	};
+
+	if (!_unlimitedStamina) then {
+		_strArray pushBack format ["%1 <img size='0.7' image='client\icons\running_man.paa'/>", 100 - ceil ((getFatigue player) * 100)];
+	};
+
+	_strArray pushBack format ["<t color='%1'>%2</t> <img size='0.7' image='client\icons\health.paa'/>", _healthTextColor, _health];
+
+	_str = "";
+
+	{ _str = format ["%1%2<br/>", _str, _x] } forEach _strArray;
+
+	_yOffsetVitals = (count _strArray + 1) * 0.04;
+
+	_vitalsPos = ctrlPosition _vitals;
+	_vitalsPos set [1, safeZoneY + safeZoneH - _yOffsetVitals]; // x
+	_vitalsPos set [3, _yOffsetVitals]; // h
 
 	_vitals ctrlShow alive player;
 	_vitals ctrlSetStructuredText parseText _str;
+	_vitals ctrlSetPosition _vitalsPos;
 	_vitals ctrlCommit 0;
 
 	_tempString = "";
-	_yOffset = 0.26;
+	_yOffset = _yOffsetVitals + 0.04;
 
 	if (isStreamFriendlyUIEnabled) then
 	{
-		_tempString = format ["<t color='#A0FFFFFF'>A3Wasteland %1<br/>www.a3wasteland.com</t>", getText (configFile >> "CfgWorlds" >> worldName >> "description")];
-		_yOffset = 0.28;
-
-		_hudVehicle ctrlSetStructuredText parseText _tempString;
-
-		_x = safeZoneX + (safeZoneW * (1 - (0.42 / SafeZoneW)));
-		_y = safeZoneY + (safeZoneH * (1 - (_yOffset / SafeZoneH)));
-		_hudVehicle ctrlSetPosition [_x, _y, 0.4, 0.65];
+		_tempString = format ["<t color='#CCCCCCCC'>A3Wasteland %1<br/>a3wasteland.com</t>", getText (configFile >> "CfgWorlds" >> worldName >> "description")];
+		_yOffset = _yOffset + 0.08;
 	}
 	else
 	{
 		if (player != vehicle player) then
 		{
-			_yOffset = 0.24;
-			_vehicle = assignedVehicle player;
+			_vehicle = vehicle player;
 
 			{
-				_icon = switch (true) do
+				if (alive _x) then
 				{
-					case (driver _vehicle == _x): { "client\icons\driver.paa" };
-					case (gunner _vehicle == _x): { "client\icons\gunner.paa" };
-					default                       { "client\icons\cargo.paa" };
-				};
+					_icon = switch (true) do
+					{
+						case (driver _vehicle == _x): { "client\icons\driver.paa" };
+						case (gunner _vehicle == _x): { "client\icons\gunner.paa" };
+						default                       { "client\icons\cargo.paa" };
+					};
 
-				_tempString = format ["%1 %2 <img image='%3'/><br/>", _tempString, name _x, _icon];
-				_yOffset = _yOffset + 0.04;
+					_tempString = format ["%1 %2 <img image='%3'/><br/>", _tempString, name _x, _icon];
+					_yOffset = _yOffset + 0.04;
+				};
 			} forEach crew _vehicle;
 		};
 	};
 
+	_hudVehiclePos = ctrlPosition _hudVehicle;
+	_hudVehiclePos set [1, safeZoneY + safeZoneH - _yOffset]; // x
+	_hudVehiclePos set [3, _yOffset - _yOffsetVitals]; // h
+
 	_hudVehicle ctrlSetStructuredText parseText _tempString;
-	_x = safeZoneX + (safeZoneW * (1 - (0.42 / SafeZoneW)));
-	_y = safeZoneY + (safeZoneH * (1 - (_yOffset / SafeZoneH)));
-	_hudVehicle ctrlSetPosition [_x, _y, 0.4, 0.65];
+	_hudVehicle ctrlSetPosition _hudVehiclePos;
 	_hudVehicle ctrlCommit 0;
 
 	// Territory system! Uses two new boxes in the top left of the HUD. We
@@ -224,16 +242,16 @@ while {true} do
 			_activityBackgroundAlpha = 0.4;
 
 			_dispUnitInfo = uiNamespace getVariable ["RscUnitInfo", displayNull];
-			_topLeftBox = _dispUnitInfo displayCtrl 113;
+			_topLeftBox = _dispUnitInfo displayCtrl getNumber (configfile >> "RscInGameUI" >> "RscUnitInfo" >> "CA_BackgroundVehicle" >> "idc"); // idc = 1200
 
 			// If top left vehicle info box is displayed, move activity controls a bit to the right
-			if (ctrlShown _topLeftBox) then
+			if (ctrlShown _topLeftBox && {[_topLeftBox, _activityIconOrigPos] call fn_ctrlOverlapCheck || [_topLeftBox, _activityTextboxOrigPos] call fn_ctrlOverlapCheck}) then
 			{
 				_topLeftBoxPos = ctrlPosition _topLeftBox;
 
 				_hudActivityIcon ctrlSetPosition
 				[
-					(_activityIconOrigPos select 0) + (_topLeftBoxPos select 2) + (0.015 * (safezoneW min safezoneH)),
+					(_topLeftBoxPos select 0) + (_topLeftBoxPos select 2) + (_activityIconOrigPos select 0) - safezoneX,
 					_activityIconOrigPos select 1,
 					_activityIconOrigPos select 2,
 					_activityIconOrigPos select 3
@@ -241,7 +259,7 @@ while {true} do
 
 				_hudActivityTextbox ctrlSetPosition
 				[
-					(_activityTextboxOrigPos select 0) + (_topLeftBoxPos select 2) + (0.015 * (safezoneW min safezoneH)),
+					(_topLeftBoxPos select 0) + (_topLeftBoxPos select 2) + (_activityTextboxOrigPos select 0) - safezoneX,
 					_activityTextboxOrigPos select 1,
 					_activityTextboxOrigPos select 2,
 					_activityTextboxOrigPos select 3
@@ -267,69 +285,62 @@ while {true} do
 	if (!isNil "BIS_fnc_feedback_damageBlur" && {ppEffectCommitted BIS_fnc_feedback_damageBlur}) then { ppEffectDestroy BIS_fnc_feedback_damageBlur };
 	if (!isNil "BIS_fnc_feedback_fatigueBlur" && {ppEffectCommitted BIS_fnc_feedback_fatigueBlur}) then { ppEffectDestroy BIS_fnc_feedback_fatigueBlur };
 
-	// Global voice warning system
-	if (_globalVoiceWarnTimer > 0 && _globalVoiceMaxWarns > 0) then
+	// Voice monitoring
+	[false] call fn_voiceChatControl;
+
+	if (isNil "_mapCtrls") then
 	{
-		if (!isNull findDisplay 55 && ctrlText (findDisplay 63 displayCtrl 101) == localize "str_channel_global") then
+		_mapCtrls =
+		[
+			[{(uiNamespace getVariable ["RscDisplayAVTerminal", displayNull]) displayCtrl 51}, controlNull]/*, // UAV Terminal
+			[{artilleryComputerDisplayGoesHere displayCtrl 500}, controlNull]*/  // Artillery computer - cannot be enabled until this issue is resolved: http://feedback.arma3.com/view.php?id=21546
+		];
+	};
+
+	if (!isNil "A3W_mapDraw_eventCode") then
+	{
+		// Add custom markers and lines to misc map controls
 		{
-			if (isNil "_globalVoiceTimestamp") then
+			if (isNull (_x select 1)) then
 			{
-				_globalVoiceTimestamp = diag_tickTime;
-			}
-			else
-			{
-				_globalVoiceTimer = _globalVoiceTimer + (diag_tickTime - _globalVoiceTimestamp);
+				_mapCtrl = call (_x select 0);
 
-				if (_globalVoiceTimer >= _globalVoiceWarnTimer) then
+				if (!isNull _mapCtrl) then
 				{
-					_globalVoiceWarning = _globalVoiceWarning + 1;
-					_globalVoiceTimestamp = diag_tickTime;
-					_globalVoiceTimer = 0;
-
-					_msgTitle = format ["Warning %1 of %2", _globalVoiceWarning, _globalVoiceMaxWarns];
-
-					if (_globalVoiceWarning < _globalVoiceMaxWarns) then
-					{
-						uiNamespace setVariable ["BIS_fnc_guiMessage_status", false];
-						["Please stop using the global voice channel, or you will be killed and crashed.", _msgTitle] spawn BIS_fnc_guiMessage;
-					}
-					else
-					{
-						_globalVoiceTimestamp = 1e11;
-						_msgTitle spawn
-						{
-							setPlayerRespawnTime 1e11;
-							player setDamage 1;
-							uiNamespace setVariable ["BIS_fnc_guiMessage_status", false];
-							_msgBox = ["You have exceeded the tolerance limit for using the global voice channel. Goodbye.", _this] spawn BIS_fnc_guiMessage;
-							_time = diag_tickTime;
-							waitUntil {scriptDone _msgBox || diag_tickTime - _time >= 5};
-							preprocessFile "client\functions\quit.sqf"; // CTD
-						};
-					};
+					_mapCtrl ctrlAddEventHandler ["Draw", A3W_mapDraw_eventCode];
+					_x set [1, _mapCtrl];
 				};
 			};
-		}
-		else
-		{
-			_globalVoiceTimestamp = nil;
-		};
+		} forEach _mapCtrls;
 	};
 
-	// Add player markers to UAV Terminal
-	if (isNull _uavMapCtrl) then
-	{
-		_uavTerminal = findDisplay 160;
-
-		if (!isNull _uavTerminal) then
+	// disabled due to lag - Improve revealing and aimlocking of targetted vehicles
+	/*{
+		if (!isNull _x) then
 		{
-			_uavMapCtrl = _uavTerminal displayCtrl 51;
-			_uavMapCtrl ctrlAddEventHandler ["Draw",
+			if ((group player) knowsAbout _x < 4) then
 			{
-				{ (_this select 0) drawIcon _x } forEach drawPlayerMarkers_array;
-			}];
+				(group player) reveal [_x, 4];
+			};
 		};
+	} forEach [cursorTarget, cursorObject];*/
+
+	if (_disableUavFeed && shownUavFeed) then
+	{
+		showUavFeed false;
 	};
 
-	uiSleep 1;
+	// override no-grass exploits
+	if (getTerrainGrid > 10) then
+	{
+		setTerrainGrid 10;
+	};
+
+	// fix for disappearing chat
+	if (!shownChat && isNull findDisplay 49) then
+	{
+		showChat true;
+	};
+
+	uiSleep 1; // do NOT set higher than 1, this will cause unintended side effects
 };

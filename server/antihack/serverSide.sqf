@@ -8,7 +8,11 @@
 
 if (!isServer) exitWith {};
 
-private ["_serverID", "_cheatFlag", "_unit"];
+waitUntil {!isNil "A3W_serverSetupComplete"};
+if !(["A3W_antiHackUnitCheck"] call isConfigOn) exitWith {};
+
+private ["_flagChecksum", "_serverID", "_cheatFlag", "_unit"];
+_flagChecksum = _this select 0;
 
 waitUntil {!isNil "bis_functions_mainscope"};
 _serverID = owner bis_functions_mainscope;
@@ -28,14 +32,18 @@ while { true } do
 
 			if (owner _unit > _serverID) then
 			{
-				if (alive _unit && {!isPlayer _unit} && {["_UAV_AI", typeOf _unit] call fn_findString == -1}) then
+				if (alive _unit && !isPlayer _unit && {getText (configFile >> "CfgVehicles" >> typeOf _unit >> "simulation") != "UAVPilot"}) then
 				{
-					if (isNil "_cheatFlag") then
+					_clientPlayer = [owner _unit] call findClientPlayer;
+
+					if (getText (configFile >> "CfgVehicles" >> typeOf _clientPlayer >> "simulation") == "headlessclient") exitWith {};
+
+					/*if (isNil "_cheatFlag") then
 					{
 						_cheatFlag = [];
 					};
 
-					_cheatFlag pushBack ["hacked unit", typeOf _unit, [owner _unit] call findClientPlayer];
+					_cheatFlag pushBack ["hacked unit", typeOf _unit, _clientPlayer];*/
 
 					for [{_i = 0}, {_i < 10 && vehicle _unit != _unit}, {_i = _i + 1}] do
 					{
@@ -46,7 +54,7 @@ while { true } do
 					deleteVehicle _unit;
 				};
 			};
-		} forEach (allUnits - playableUnits);
+		} forEach (allUnits - allPlayers);
 	};
 
 	if (!isNil "_cheatFlag") then
@@ -57,9 +65,9 @@ while { true } do
 
 			if (isPlayer _player) then
 			{
-				[[getPlayerUID _player, _flagChecksum], "A3W_fnc_clientFlagHandler", _player, false] call A3W_fnc_MP;
+				[getPlayerUID _player, _flagChecksum] remoteExec ["A3W_fnc_clientFlagHandler", _player];
 
-				[name _player, getPlayerUID _player, _x select 0, _x select 1, _flagChecksum] call A3W_fnc_flagHandler;
+				[_player, _x select 0, _x select 1, _flagChecksum] call A3W_fnc_flagHandler;
 			};
 		} forEach _cheatFlag;
 

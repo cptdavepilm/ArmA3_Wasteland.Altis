@@ -15,14 +15,25 @@
 	Returns:
 	STRING
 */
-private ["_tmp", "_buf", "_rem"];
+if (!finite _this) exitWith { "0" };
+
+((_this - (_this % 1)) toFixed 0) + ((str abs (_this % 1)) select [1])
+
+/*private ["_tmp", "_buf"];
 _tmp = abs _this;
 _buf = [];
 
-while {_tmp >= 1} do
+if (_tmp < 1) then
 {
-	_buf pushBack (48 + floor (_tmp % 10)); // 48 = "0"
-	_tmp = _tmp / 10;
+	_buf pushBack 48; // 48 = "0"
+}
+else
+{
+	while {_tmp >= 1} do
+	{
+		_buf pushBack (48 + floor (_tmp % 10));
+		_tmp = _tmp / 10;
+	};
 };
 
 if (_this < 0) then
@@ -31,5 +42,4 @@ if (_this < 0) then
 };
 
 reverse _buf;
-_rem = str (_this % 1);
-toString _buf + (_rem select [_rem find "."])
+toString _buf + (str (abs _this % 1) select [1])*/

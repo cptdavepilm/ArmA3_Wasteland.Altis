@@ -17,9 +17,11 @@ _dialog = findDisplay vehshop_DIALOG;
 _vehlisttext = _dialog displayCtrl vehshop_veh_TEXT;
 _vehlist = _dialog displayCtrl vehshop_veh_list;
 _colorlist = _dialog displayCtrl vehshop_color_list;
+private _partList = _dialog displayCtrl vehshop_part_list;
 
 lbClear _vehlist;
 lbClear _colorlist;
+lbClear _partList;
 _vehlist lbSetCurSel -1;
 
 _vehArray = switch (_switch) do
@@ -45,18 +47,20 @@ _playerSideNum = switch (playerSide) do
 
 // Populate the vehicle shop list
 {
-	_vehClass = _x select 1;
+	_x params ["_vehName", "_vehClass"];
 
-	if (!_noBuzzard || {!(_vehClass isKindOf "Plane_Fighter_03_base_F")}) then
+	if ((!_noBuzzard || {!(_vehClass isKindOf "Plane_Fighter_03_base_F")}) && !("HIDDEN" in (_x select [3,999]))) then
 	{
 		_vehCfg = configFile >> "CfgVehicles" >> _vehClass;
 
-		if (getNumber (_vehCfg >> "isUav") <= 0 || {getNumber (_vehCfg >> "side") == _playerSideNum}) then
+		if (["UGV_01_base_F","UGV_02_Base_F","UAV_01_base_F","UAV_02_base_F","UAV_06_base_F"] findIf {_vehClass isKindOf _x} == -1 || {getNumber (_vehCfg >> "side") in [3,_playerSideNum]}) then
 		{
 			_vehPicture = getText (configFile >> "CfgVehicles" >> _vehClass >> "picture");
-			_vehlistIndex = _vehlist lbAdd format ["%1", _x select 0];
+			_vehlistIndex = _vehlist lbAdd format ["%1", [_vehName, getText (_vehCfg >> "displayName")] select (_vehName == "")];
 			_vehlist lbSetPicture [_vehlistIndex, _vehPicture];
-			_vehlist lbSetData [_vehlistIndex, _vehClass];
+			_vehlist lbSetData [_vehlistIndex, str _x];
+
+			[_x, configFile >> "CfgVehicles", _vehlist, _vehlistIndex] call fn_checkStoreItemDLC;
 		};
 	};
 } forEach _vehArray;

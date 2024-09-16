@@ -8,6 +8,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define VEHICLE_UNLOCKED(VEH) (locked (VEH) < 2 || (VEH) getVariable ["ownerUID","0"] isEqualTo getPlayerUID player)
+
 if (R3F_LOG_mutex_local_verrou) then
 {
 	player globalChat STR_R3F_LOG_mutex_action_en_cours;
@@ -28,7 +30,7 @@ else
 	{
 		_transporteur = _transporteur select 0;
 
-		if (alive _transporteur && ((velocity _transporteur) call BIS_fnc_magnitude < 6) && (getPos _transporteur select 2 < 2) && !(_transporteur getVariable "R3F_LOG_disabled")) then
+		if (alive _transporteur && ((velocity _transporteur) call BIS_fnc_magnitude < 6) && (getPos _transporteur select 2 < 2) && VEHICLE_UNLOCKED(_transporteur) && !(_transporteur getVariable "R3F_LOG_disabled")) then
 		{
 			private ["_objets_charges", "_chargement_actuel", "_cout_capacite_objet", "_chargement_maxi"];
 
@@ -93,6 +95,13 @@ else
 
 				[R3F_LOG_PUBVAR_point_attache, true] call fn_enableSimulationGlobal;
 				[_objet, true] call fn_enableSimulationGlobal;
+
+				if (unitIsUAV _objet) then
+				{
+					[_objet, 2] call A3W_fnc_setLockState; // lock
+					["disableDriving", _objet] call A3W_fnc_towingHelper;
+				};
+
 				_objet attachTo [R3F_LOG_PUBVAR_point_attache, _position_attache];
 				_objet enableCollisionWith _transporteur;
 

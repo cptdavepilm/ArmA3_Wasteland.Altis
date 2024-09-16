@@ -6,7 +6,7 @@
 //	@file Author: [404] Deadbeat, [404] Costlyy, [GoT] JoSchaap
 //	@file Args:
 
-_radius = 70;
+_radius = 70; // also defined in client\items\artillery\artilleryMapClick.sqf
 _status = [];
 _gunStores = [];
 _col_empty = "ColorYellow";
@@ -16,7 +16,7 @@ _col_mixed = "ColorOrange";
 
 //Creates the markers around gunstores.
 {
-	if (!isPlayer _x && {["GunStore", vehicleVarName _x] call fn_startsWith}) then
+	if (!isPlayer _x && {(vehicleVarName _x) select [0,8] == "GunStore"}) then
 	{
 		_npcPos = getPosATL _x;
 
@@ -117,7 +117,7 @@ if (["A3W_showGunStoreStatus"] call isConfigOn) then
 			{
 				if (isPlayer _x && alive _x && _x distance _npc < _radius) then
 				{
-					if ((side group _x == playerSide && playerSide in [BLUFOR,OPFOR]) || group _x == group player) then
+					if ([_x, player] call A3W_fnc_isFriendly) then
 					{
 						_friendlyCount = _friendlyCount + 1;
 					}

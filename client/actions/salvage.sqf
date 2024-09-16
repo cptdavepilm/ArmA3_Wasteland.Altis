@@ -110,9 +110,12 @@ switch (true) do
 	};
 };
 
+private _variant = _vehicle getVariable ["A3W_vehicleVariant", ""];
+if (_variant != "") then { _variant = "variant_" + _variant };
+
 // Final money reward is decided from vehicle store price
 {
-	if (_x select 1 == _vehClass) exitWith
+	if (_vehClass == _x select 1 && (_variant == "" || {_variant in _x})) exitWith
 	{
 		_money = GET_ONE_TENTH_PRICE(_x select 2);
 	};
@@ -127,6 +130,7 @@ mutexScriptInProgress = false;
 if (_success) then
 {
 	deleteVehicle _vehicle;
-	player setVariable ["cmoney", (player getVariable ["cmoney", 0]) + _money, true];
+	//player setVariable ["cmoney", (player getVariable ["cmoney", 0]) + _money, true];
+	[player, _money] call A3W_fnc_setCMoney;
 	[format ["You have obtained $%1 from salvaging", [_money] call fn_numbersText], 5] call mf_notify_client;
 };

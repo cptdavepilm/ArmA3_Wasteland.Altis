@@ -7,13 +7,14 @@
 if (!isServer) exitwith {};
 
 #define MISSION_LOCATION_COOLDOWN (10*60)
+#define MISSION_TIMER_EXTENSION (15*60)
 
-private ["_controllerSuffix", "_missionTimeout", "_availableLocations", "_missionLocation", "_leader", "_marker", "_failed", "_startTime", "_leaderTemp", "_lastPos", "_floorHeight"];
+private ["_controllerSuffix", "_missionTimeout", "_availableLocations", "_missionLocation", "_leader", "_marker", "_failed", "_complete", "_startTime", "_oldAiCount", "_leaderTemp", "_newAiCount", "_adjustTime", "_lastPos", "_floorHeight"];
 
 // Variables that can be defined in the mission script :
 private ["_missionType", "_locationsArray", "_aiGroup", "_missionPos", "_missionPicture", "_missionHintText", "_successHintMessage", "_failedHintMessage"];
 
-_controllerSuffix = [_this, 0, "", [""]] call BIS_fnc_param;
+_controllerSuffix = param [0, "", [""]];
 _aiGroup = grpNull;
 
 if (!isNil "_setupVars") then { call _setupVars };
@@ -26,7 +27,7 @@ if (!isNil "_locationsArray") then
 {
 	while {true} do
 	{
-		_availableLocations = [_locationsArray, { !(_x select 1) && diag_tickTime - ([_x, 2, -1e11] call BIS_fnc_param) >= MISSION_LOCATION_COOLDOWN}] call BIS_fnc_conditionalSelect;
+		_availableLocations = [_locationsArray, { !(_x select 1) && diag_tickTime - (_x param [2, -1e11]) >= MISSION_LOCATION_COOLDOWN}] call BIS_fnc_conditionalSelect;
 
 		if (count _availableLocations > 0) exitWith {};
 		uiSleep 60;
@@ -41,6 +42,7 @@ if (!isNil "_setupObjects") then { call _setupObjects };
 
 _leader = leader _aiGroup;
 _marker = [_missionType, _missionPos] call createMissionMarker;
+_aiGroup setVariable ["A3W_missionMarkerName", _marker, true];
 
 if (isNil "_missionPicture") then { _missionPicture = "" };
 
@@ -56,13 +58,41 @@ call missionHint;
 diag_log format ["WASTELAND SERVER - %1 Mission%2 waiting to be finished: %3", MISSION_PROC_TYPE_NAME, _controllerSuffix, _missionType];
 
 _failed = false;
+_complete = false;
 _startTime = diag_tickTime;
+_oldAiCount = 0;
+
+if (isNil "_ignoreAiDeaths") then { _ignoreAiDeaths = false };
 
 waitUntil
 {
-	sleep 1;
+	uiSleep 1;
 
 	_leaderTemp = leader _aiGroup;
+
+	// Force immediate leader change if current one is dead
+	if (!alive _leaderTemp) then
+	{
+		{
+			if (alive _x) exitWith
+			{
+				_aiGroup selectLeader _x;
+				_leaderTemp = _x;
+			};
+		} forEach units _aiGroup;
+	};
+
+	_newAiCount = count units _aiGroup;
+
+	if (_newAiCount < _oldAiCount) then
+	{
+		// some units were killed, mission expiry will be reset to 15 mins if it's currently lower than that
+		_adjustTime = if (_missionTimeout < MISSION_TIMER_EXTENSION) then { MISSION_TIMER_EXTENSION - _missionTimeout } else { 0 };
+		_startTime = _startTime max (diag_tickTime - ((MISSION_TIMER_EXTENSION - _adjustTime) max 0));
+	};
+
+	_oldAiCount = _newAiCount;
+
 	if (!isNull _leaderTemp) then { _leader = _leaderTemp }; // Update current leader
 
 	if (!isNil "_waitUntilMarkerPos") then { _marker setMarkerPos (call _waitUntilMarkerPos) };
@@ -70,7 +100,13 @@ waitUntil
 
 	_failed = ((!isNil "_waitUntilCondition" && {call _waitUntilCondition}) || diag_tickTime - _startTime >= _missionTimeout);
 
-	(_failed || {alive _x} count units _aiGroup == 0)
+	if (!isNil "_waitUntilSuccessCondition" && {call _waitUntilSuccessCondition}) then
+	{
+		_failed = false;
+		_complete = true;
+	};
+
+	(_failed || _complete || (!_ignoreAiDeaths && {alive _x} count units _aiGroup == 0))
 };
 
 if (_failed) then
@@ -127,16 +163,35 @@ else
 	if (!isNil "_vehicle" && {typeName _vehicle == "OBJECT"}) then
 	{
 		_vehicle setVariable ["R3F_LOG_disabled", false, true];
-		_vehicle setVariable ["A3W_missionVehicle", true];
+		_vehicle setVariable ["A3W_missionVehicle", true, true];
+		_vehicle setVariable ["A3W_lockpickDisabled", nil, true];
+
+		if (!isNil "fn_manualVehicleSave" && !(_vehicle getVariable ["A3W_skipAutoSave", false])) then
+		{
+			_vehicle call fn_manualVehicleSave;
+		};
 	};
+
+	private _convoyAutoSave = ["A3W_missionVehicleSaving"] call isConfigOn;
 
 	if (!isNil "_vehicles" && {typeName _vehicles == "ARRAY"}) then
 	{
 		{
 			if (!isNil "_x" && {typeName _x == "OBJECT"}) then
 			{
+				if (!_convoyAutoSave) then
+				{
+					_x setVariable ["A3W_skipAutoSave", true, true];
+				};
+
 				_x setVariable ["R3F_LOG_disabled", false, true];
-				_x setVariable ["A3W_missionVehicle", true];
+				_x setVariable ["A3W_missionVehicle", true, true];
+				_x setVariable ["A3W_lockpickDisabled", nil, true];
+
+				if (!isNil "fn_manualVehicleSave" && !(_x getVariable ["A3W_skipAutoSave", false])) then
+				{
+					_x call fn_manualVehicleSave;
+				};
 			};
 		} forEach _vehicles;
 	};

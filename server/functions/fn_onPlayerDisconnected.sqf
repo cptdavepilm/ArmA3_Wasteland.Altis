@@ -4,19 +4,24 @@
 //	@file Name: fn_onPlayerDisconnected.sqf
 //	@file Author: AgentRev
 
-_id = if (isNil "_id") then { _this select 0 } else { _id };
-_uid = if (isNil "_uid") then { _this select 1 } else { _uid };
-_name = if (isNil "_name") then { _this select 2 } else { _name };
+params ["_id", "_uid", "_name", "_owner", "_jip"];
 
 diag_log format ["Player disconnected: %1 (%2)", _name, _uid];
+if (_uid isEqualTo "") exitWith {};
+
+private _resend = false;
 
 // Clear player from group invites
 {
 	if (_uid in _x) then
 	{
 		currentInvites set [_forEachIndex, -1];
+		_resend = true;
 	};
 } forEach currentInvites;
 
-currentInvites = currentInvites - [-1];
-publicVariable "currentInvites";
+if (_resend) then
+{
+	currentInvites = currentInvites - [-1];
+	publicVariable "currentInvites";
+};
